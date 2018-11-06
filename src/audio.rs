@@ -8,21 +8,7 @@ use self::cpal::{SampleFormat, StreamData, EventLoop, UnknownTypeOutputBuffer};
 pub fn initialize_audio() {
 
   // load some audio
-  let mut reader = WavReader::open("/Users/nunja/Documents/Audiolib/smplr/loop32.wav").unwrap();
-
-  // get the spec
-  let spec = reader.spec();
-
-  // used to convert samples to f32 -1.0 - 1.0
-  let max_sample_val = match spec.bits_per_sample {
-    16 => i16::max as i32,
-    24 => i32::max as i32,
-    32 => i32::max as i32,
-    _ => i32::max as i32,
-  };
-
-  // samples are a mutable iterator
-  let mut samples = reader.samples::<i32>();
+  let mut reader = WavReader::open("/Users/nunja/Documents/Audiolib/smplr/loop16.wav").unwrap();
 
   // creates event loop
   let event_loop = EventLoop::new();
@@ -46,6 +32,21 @@ pub fn initialize_audio() {
     SampleFormat::F32 => println!("audio: Sample Type is F32")
   } 
 
+  // samples are an iterator
+  let samples = reader.samples::<i16>();
+  
+  // buffering the samples in memory
+  let smpl_buffer: Vec<_> = samples.map(|x| match x {
+    Ok(sample) => {
+      let max = i16::max as i16;
+      sample as f32 / max as f32
+    },
+    _ => 0.0
+  }).collect();
+
+  // here is magic, make the iter cyclable !!!
+  let mut buffer_iter = smpl_buffer.iter().cloned().cycle();
+
   // creates the stream
   let stream_id = event_loop.build_output_stream(&device, &format).unwrap();
 
@@ -57,12 +58,13 @@ pub fn initialize_audio() {
       match stream_data {
           StreamData::Output { buffer: UnknownTypeOutputBuffer::F32(mut buffer) } => {
               for elem in buffer.iter_mut() {
-                  match samples.next() {
+                  match buffer_iter.next() {
                     Some(sample) => {
-                      let s = sample.unwrap() as f32;
-                      *elem =  (s/max_sample_val as f32) * 0.5;
+                      *elem = sample * 0.5;
                     },
-                    None => *elem = 0.0 // finish
+                    None => {
+                      *elem = 0.0; // finish
+                    }
                   }
               }
           },
