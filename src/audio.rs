@@ -60,7 +60,7 @@ pub fn initialize_audio() {
                   match samples.next() {
                     Some(sample) => {
                       let s = sample.unwrap() as f32;
-                      *elem =  s/max_sample_val as f32;
+                      *elem =  (s/max_sample_val as f32) * 0.5;
                     },
                     None => *elem = 0.0 // finish
                   }
