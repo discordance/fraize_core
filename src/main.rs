@@ -1,7 +1,7 @@
 // local mid lib
 mod mid;
 // local audio lib
-mod audio;
+mod audio_pa;
 
 fn main() {
     // ->
@@ -11,7 +11,7 @@ fn main() {
     let midi_thread = mid::initialize_inputs();
 
     // init audio
-    audio::initialize_audio();
+    audio_pa::initialize_audio();
 
     // wait fo midi thread to exit
     match midi_thread.join() {

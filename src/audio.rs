@@ -45,8 +45,7 @@ pub fn initialize_audio() {
   }).collect();
 
   // here is magic, make the iter cyclable !!!
-  let mut buffer_iter = smpl_buffer.iter().cloned().cycle();
-
+  let mut buffer_iter = smpl_buffer.iter().cycle();
 
   // creates the stream
   let stream_id = event_loop.build_output_stream(&device, &format).unwrap();

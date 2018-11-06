@@ -79,6 +79,7 @@ fn midi_sync_cb(tcode: u64, mid_data: &[u8], tx: &mut Bus<SyncMessage>) {
 pub fn initialize_inputs() -> thread::JoinHandle<()> {
   // initialize in its own thread
   let midi_thread = thread::spawn(move || {
+    
     // bus channel to communicate form the midi callback to this thread
     let mut bus = Bus::new(1);
     let mut rx = bus.add_rx();
