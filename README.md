@@ -6,6 +6,10 @@
 - midir
 - pvoc-rs
 
+
+## THIS IS FREAK DSP
+https://github.com/RustAudio/sample
+
 ## Ableton tricks
 
 ### BEAT Detection

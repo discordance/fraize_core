@@ -4,6 +4,7 @@ extern crate bus;
 
 use std::thread;
 use std::time::Duration;
+use std::io::Cursor;
 
 use self::bus::Bus;
 use self::portaudio as pa;
@@ -70,6 +71,7 @@ pub fn initialize_audio() {
   };
 
   let mut stream = pa.open_blocking_stream(settings).expect("audio: Couldnt open the stream");
+
   stream.start().expect("audio: Couldn't start the stream");
 
   // now start the main read/write loop!
