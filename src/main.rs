@@ -1,7 +1,7 @@
 // local mid lib
 mod mid;
 // local audio lib
-mod audio_pa;
+mod audio;
 
 fn main() {
     // ->

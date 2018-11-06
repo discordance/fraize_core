@@ -10,6 +10,8 @@ use self::bus::Bus;
 use self::portaudio as pa;
 use self::hound::WavReader;
 
+mod dist;
+
 const CHANNELS: i32 = 2;
 const SAMPLE_RATE: f64 = 44_100.0;
 const FRAMES_PER_BUFFER: u32 = 512;
