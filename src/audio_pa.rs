@@ -79,9 +79,6 @@ pub fn initialize_audio() {
       Ok(num) => {
         if num == 2 {
           buffer_iter = smpl_buffer.iter().cycle();
-          // stream.stop().expect("audio: Couldn't stop the stream");
-          // stream.close().expect("audio: Couldn't close the stream");
-          // break;
         }
       },
       _ => ()
