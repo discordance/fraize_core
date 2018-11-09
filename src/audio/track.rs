@@ -35,7 +35,7 @@ impl AudioTrack {
     // samples are an iterator
     // Read the interleaved samples and convert them to a signal.
     let samples: Vec<f32> = reader.into_samples::<i16>().filter_map(Result::ok).map(i16::to_sample::<f32>).collect();
-    self.signal = Box::new(signal::from_interleaved_samples_iter(samples).until_exhausted());
+    self.signal = Box::new(signal::from_interleaved_samples_iter(samples).until_exhausted().cycle());
   }
 }
 
