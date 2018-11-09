@@ -4,14 +4,30 @@ extern crate time_calc;
 
 use std::thread;
 
-use self::bus::Bus;
+use self::bus::{Bus, BusReader};
 use self::midir::os::unix::VirtualInput;
 use self::midir::MidiInput;
 use self::time_calc::{Ppqn, Ticks};
 
 const PPQN: Ppqn = 24;
 
-// sync messages form the callback
+// midi commands (for oth threads)
+#[derive(Clone)]
+pub enum CommandMessage {
+  Playback(PlaybackMessage),
+  Volume(u8, f32), //  (track_num, vol)
+  Distortion(u8, f32) //  (track_num, level)
+}
+
+// midi sync messages
+// composite type for outer world
+#[derive(Clone)]
+struct PlaybackMessage {
+  sync: SyncMessage,
+  time: MidiTime,
+}
+
+// inner midi sync messages
 #[derive(Clone)]
 enum SyncMessage {
   Start(),
@@ -20,6 +36,7 @@ enum SyncMessage {
 }
 
 // keeps time with midi and calculate useful values
+#[derive(Clone)]
 struct MidiTime {
   tempo: f32,
   ticks: u64, // tick counter
@@ -27,6 +44,7 @@ struct MidiTime {
   last_timecode: u64,
 } // implem
 impl MidiTime {
+
   // restart midi time
   fn restart(&mut self) {
     self.ticks = 0;
@@ -76,13 +94,18 @@ fn midi_sync_cb(tcode: u64, mid_data: &[u8], tx: &mut Bus<SyncMessage>) {
 }
 
 // initialize midi machinery
-pub fn initialize_inputs() -> thread::JoinHandle<()> {
+pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<CommandMessage>) {
+  
+  // bus channel to communicate form the midi callback to this thread
+  let mut outer_bus = Bus::new(6);
+  let mut outer_rx = outer_bus.add_rx();
+
   // initialize in its own thread
   let midi_thread = thread::spawn(move || {
     
     // bus channel to communicate form the midi callback to this thread
-    let mut bus = Bus::new(1);
-    let mut rx = bus.add_rx();
+    let mut inner_bus = Bus::new(1);
+    let mut inner_rx = inner_bus.add_rx();
 
     // mutable midi time
     let mut midi_time = MidiTime {
@@ -100,7 +123,7 @@ pub fn initialize_inputs() -> thread::JoinHandle<()> {
 
     // open connection on virtual port
     let _connection = input
-      .create_virtual("midi: Rust Smplr Input", midi_sync_cb, bus)
+      .create_virtual("midi: Rust Smplr Input", midi_sync_cb, inner_bus)
       .expect("midi: Couldn't open connection");
 
     // ->
@@ -110,7 +133,7 @@ pub fn initialize_inputs() -> thread::JoinHandle<()> {
     // infinite loop in this thread, blocked by channel receiver
     loop {
       // receive form channel
-      let message = rx.recv().unwrap();
+      let message = inner_rx.recv().unwrap();
       match message {
         // start received
         SyncMessage::Start() => {
@@ -132,5 +155,5 @@ pub fn initialize_inputs() -> thread::JoinHandle<()> {
   });
 
   // return thread
-  return midi_thread;
+  return (midi_thread, outer_rx);
 }

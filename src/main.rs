@@ -1,5 +1,6 @@
 // local mid lib
-mod mid;
+mod midi;
+
 // local audio lib
 mod audio;
 
@@ -8,10 +9,10 @@ fn main() {
     println!("Hello Sampler");
 
     // init midi inputs
-    let midi_thread = mid::initialize_inputs();
+    let (midi_thread, midi_rx) = midi::initialize_inputs();
 
     // init audio
-    audio_pa::initialize_audio();
+    audio::initialize_audio(midi_rx);
 
     // wait fo midi thread to exit
     match midi_thread.join() {

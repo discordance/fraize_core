@@ -1,118 +1,65 @@
-extern crate hound;
-extern crate portaudio;
 extern crate bus;
+extern crate cpal;
 
-use std::thread;
-use std::time::Duration;
-use std::io::Cursor;
+mod track;
 
-use self::bus::Bus;
-use self::portaudio as pa;
-use self::hound::WavReader;
-
-mod dist;
-
-const CHANNELS: i32 = 2;
-const SAMPLE_RATE: f64 = 44_100.0;
-const FRAMES_PER_BUFFER: u32 = 512;
+use self::bus::{BusReader};
+use self::track::AudioTrack;
+use self::cpal::{SampleFormat, StreamData, EventLoop, UnknownTypeOutputBuffer};
 
 // initialize audio machinery
-pub fn initialize_audio() {
+pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
+
+  // init our beautiful test audiotrack
+  let mut audio_track = AudioTrack::new(midi_rx);
+  audio_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop16.wav");
+
+  // init audio with CPAL !
+  // creates event loop
+  let event_loop = EventLoop::new();
+
+  // audio out device
+  let device = cpal::default_output_device().expect("audio: no output device available");
+
+  // supported formats is an iterator
+  let mut supported_formats_range = device.supported_output_formats()
+    .expect("audio: error while querying formats");
   
-  // bus channel
-  let mut bus = Bus::new(1);
-  let mut rx = bus.add_rx();
+  let format = supported_formats_range.next()
+    .expect("audio: No supported format.")
+    .with_max_sample_rate();
 
-  // test thread
-  thread::spawn(move || {
-    bus.broadcast(1);
-    thread::sleep(Duration::from_secs(5)); // block for two seconds
-    bus.broadcast(2);
-  });  
+  // display some info
+  println!("audio: Default OUTPUT Samplerate: {}", format.sample_rate.0);
+  match format.data_type {
+    SampleFormat::U16 => println!("audio: Supported sample type is U16"),
+    SampleFormat::I16 => println!("audio: Supported sample type is I16"),
+    SampleFormat::F32 => println!("audio: Supported sample type is F32")
+  }   
 
-  // load some audio
-  let mut reader = WavReader::open("/Users/nunja/Documents/Audiolib/smplr/loop16.wav").unwrap();
+  // creates the stream
+  let stream_id = event_loop.build_output_stream(&device, &format).unwrap();
 
-  // samples are an iterator
-  let samples = reader.samples::<i16>();
-  
-  // buffering the samples in memory
-  let smpl_buffer: Vec<f32> = samples.map(|x| match x {
-    Ok(sample) => {
-      sample as f32 / std::i16::MAX as f32
-    },
-    _ => 0.0
-  }).collect();
+  // add stream
+  event_loop.play_stream(stream_id);
 
-  // here is magic, make the iter cyclable !!!
-  let mut buffer_iter = smpl_buffer.iter().cycle();
-
-  // initialize
-  let pa = pa::PortAudio::new()
-    .expect("audio: Unable to start Port Audio");
-
-  // pa settings
-  let settings: pa::OutputStreamSettings<f32> = pa.default_output_stream_settings(CHANNELS, SAMPLE_RATE, FRAMES_PER_BUFFER)
-    .expect("audio: Unable to configure settings");
-
-
-  // We'll use this function to wait for read/write availability.
-  fn wait_for_stream<F>(f: F, name: &str) -> u32
-      where F: Fn() -> Result<pa::StreamAvailable, pa::error::Error>
-  {
-      'waiting_for_stream: loop {
-          match f() {
-              Ok(available) => match available {
-                  pa::StreamAvailable::Frames(frames) => return frames as u32,
-                  pa::StreamAvailable::OutputUnderflowed => println!("audio: Output stream has underflowed"),
-                  _ => (),
-              },
-              Err(err) => panic!("audio: An error occurred while waiting for the {} stream: {}", name, err),
-          }
-      }
-  };
-
-  let mut stream = pa.open_blocking_stream(settings).expect("audio: Couldnt open the stream");
-
-  stream.start().expect("audio: Couldn't start the stream");
-
-  // now start the main read/write loop!
-  'stream: loop {
-
-    match rx.try_recv() {
-      Ok(num) => {
-        if num == 2 {
-          buffer_iter = smpl_buffer.iter().cycle();
-        }
-      },
-      _ => ()
-    };
-
-    // how many frames are available for writing on the output stream?
-    let out_frames = wait_for_stream(|| stream.write_available(), "Write");
-
-    if out_frames > 0 {
-      let n_write_samples = out_frames as usize * CHANNELS as usize;
-      stream.write(out_frames, |output| {
-        for i in 0..n_write_samples {
-            match buffer_iter.next() {
-              Some(sample) => {
-                output[i] = sample * 0.5;
-              },
-              None => {
-                output[i] = 0.0; // finish
+  // audio callback
+  event_loop.run(move |_stream_id, stream_data| {
+      match stream_data {
+          StreamData::Output { buffer: UnknownTypeOutputBuffer::F32(mut buffer) } => {
+              for elem in buffer.iter_mut() {
+                  match audio_track.next() {
+                    Some(sample) => {
+                      // println!("sample: {}", sample);
+                      *elem = sample * 0.5;
+                    },
+                    None => {
+                      *elem = 0.0; // finish
+                    }
+                  }
               }
-            }
-        }
-      }).expect("Stream Write Error");
-    } else {
-      pa.sleep(1);
-    }
-  }
-  // pa.sleep(10 * 1_000);
-
-  // stream.stop().expect("audio: Couldnt stop the stream");
-  // stream.close().expect("audio: Couldnt close the stream");
-
-  // println!("ende");
+          },
+          _ => (),
+      }
+  });
 }
