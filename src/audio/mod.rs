@@ -1,8 +1,11 @@
 extern crate bus;
 extern crate cpal;
+extern crate sample;
 
 mod track;
 
+use self::sample::{ToFrameSliceMut};
+use self::sample::frame::{Frame, Stereo};
 use self::bus::{BusReader};
 use self::track::AudioTrack;
 use self::cpal::{SampleFormat, StreamData, EventLoop, UnknownTypeOutputBuffer};
@@ -47,17 +50,17 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
   event_loop.run(move |_stream_id, stream_data| {
       match stream_data {
           StreamData::Output { buffer: UnknownTypeOutputBuffer::F32(mut buffer) } => {
-              for elem in buffer.iter_mut() {
-                  match audio_track.next() {
-                    Some(sample) => {
-                      // println!("sample: {}", sample);
-                      *elem = sample * 0.5;
-                    },
-                    None => {
-                      *elem = 0.0; // finish
-                    }
-                  }
-              }
+            // here we implement the trait sample::ToFrameSliceMut;
+            // we can take a mutable buffer from the audio callback, but framed in stereo !!
+            let buffer: &mut [[f32; 2]] = buffer.to_frame_slice_mut().unwrap();
+            for out_frame in buffer {
+              match audio_track.next() {
+                  Some(frame) => *out_frame = frame,
+                  None => {
+                      *out_frame = Stereo::<f32>::equilibrium();
+                  },
+                }
+            }
           },
           _ => (),
       }

@@ -14,17 +14,15 @@ pub struct AudioTrack {
   command_rx: BusReader<::midi::CommandMessage>,
 
   // iterator
-  samples_iter: Box<Iterator<Item = f32> + Send>,
+  signal: Box<Iterator<Item = Stereo<f32>> + Send>,
 }
 impl AudioTrack {
 
   // constructor
   pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> AudioTrack {
-    let is: Vec<f32> = Vec::new();
-    let it = is.into_iter();
     AudioTrack {
       command_rx,
-      samples_iter: Box::new(it)
+      signal: Box::new(sample::signal::equilibrium().until_exhausted())
     }
   }
 
@@ -37,17 +35,18 @@ impl AudioTrack {
     // samples are an iterator
     // Read the interleaved samples and convert them to a signal.
     let samples: Vec<f32> = reader.into_samples::<i16>().filter_map(Result::ok).map(i16::to_sample::<f32>).collect();
-    self.samples_iter = Box::new(samples.into_iter().cycle());
+    self.signal = Box::new(signal::from_interleaved_samples_iter(samples).until_exhausted());
   }
 }
 
 // Implement `Iterator` for `AudioTrack`.
 impl Iterator for AudioTrack {
-    type Item = f32;
+    type Item = Stereo<f32>;
 
     // next!
     fn next(&mut self) -> Option<Self::Item> {
-      match self.samples_iter.next() {
+      // audio thread !!!
+      match self.signal.next() {
         Some(sample) => {
           return Some(sample)
         },
