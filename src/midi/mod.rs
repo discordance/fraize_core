@@ -22,7 +22,7 @@ pub enum CommandMessage {
 // midi sync messages
 // composite type for outer world
 #[derive(Clone)]
-struct PlaybackMessage {
+pub struct PlaybackMessage {
   sync: SyncMessage,
   time: MidiTime,
 }
@@ -98,7 +98,7 @@ pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<CommandMessage>
   
   // bus channel to communicate form the midi callback to this thread
   let mut outer_bus = Bus::new(6);
-  let mut outer_rx = outer_bus.add_rx();
+  let outer_rx = outer_bus.add_rx();
 
   // initialize in its own thread
   let midi_thread = thread::spawn(move || {
