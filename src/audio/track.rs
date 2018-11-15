@@ -2,14 +2,27 @@ extern crate bus;
 extern crate hound;
 extern crate sample;
 
+use std::ffi::OsStr;
+use std::path::Path;
+
 use self::bus::BusReader;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::interpolate::Linear;
-use self::sample::{signal, Sample, Signal, Frame};
+use self::sample::{signal, Frame, Sample, Signal};
 
-
+// @TODO this is ugly but what to do without generics ?
 type FramedSignal = signal::FromInterleavedSamplesIterator<std::vec::IntoIter<f32>, Stereo<f32>>;
+
+// helper that parses the number of beats of an audio sample in the filepath
+fn parse_filepath_beats(path: &str) -> i16 {
+  // compute path
+  let path_obj = Path::new(path);
+  let file_stem = path_obj.file_stem().unwrap();
+  let file_stem = file_stem.to_str().unwrap();
+  println!("file stem {}", file_stem);
+  return 0;
+}
 
 // an audio track
 pub struct AudioTrack {
@@ -44,6 +57,8 @@ impl AudioTrack {
 
   // load audio file
   pub fn load_file(&mut self, path: &str) {
+    // compute number of beats
+    parse_filepath_beats(path);
     // load some audio
     let reader = WavReader::open(path).unwrap();
 
@@ -62,7 +77,6 @@ impl AudioTrack {
   fn reloop(&mut self) {
     // reset frame count
     self.elasped_frames = 0;
-
     // for interpolation
     let interp = Linear::from_source(&mut self.signal);
     // iterator
@@ -70,26 +84,22 @@ impl AudioTrack {
   }
 
   // fetch commands from rx
-  fn fetch_commands(&mut self){
+  fn fetch_commands(&mut self) {
     match self.command_rx.try_recv() {
-      Ok(command) => {
-        match command {
-          ::midi::CommandMessage::Playback(playback_message) => {
-            match playback_message.sync {
-              ::midi::SyncMessage::Start() => {
-                self.reloop();
-                self.playing = true;
-              },
-              ::midi::SyncMessage::Stop() => {
-                self.playing = false;
-                self.reloop();
-              },
-              _ => ()
-            }
+      Ok(command) => match command {
+        ::midi::CommandMessage::Playback(playback_message) => match playback_message.sync {
+          ::midi::SyncMessage::Start() => {
+            self.reloop();
+            self.playing = true;
           }
-        }
+          ::midi::SyncMessage::Stop() => {
+            self.playing = false;
+            self.reloop();
+          }
+          _ => (),
+        },
       },
-      _ => ()
+      _ => (),
     };
   }
 }
@@ -100,20 +110,19 @@ impl Iterator for AudioTrack {
 
   // next!
   fn next(&mut self) -> Option<Self::Item> {
-    
     // non blocking command fetch
     self.fetch_commands();
-    
+
     // doesnt consume if not playing
-    if !self.playing{
+    if !self.playing {
       return Some(Stereo::<f32>::equilibrium());
     }
     // audio thread !!!
     match self.signal_it.next() {
       Some(frame) => {
-         self.elasped_frames += 1;
-         return Some(frame.scale_amp(self.volume));
-      },
+        self.elasped_frames += 1;
+        return Some(frame.scale_amp(self.volume));
+      }
       None => {
         // init
         self.reloop();
