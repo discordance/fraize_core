@@ -10,12 +10,13 @@ use self::bus::{BusReader};
 use self::track::AudioTrack;
 use self::cpal::{SampleFormat, StreamData, EventLoop, UnknownTypeOutputBuffer};
 
+
 // initialize audio machinery
 pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
 
   // init our beautiful test audiotrack
   let mut audio_track = AudioTrack::new(midi_rx);
-  audio_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop16.wav");
+  audio_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
   // init audio with CPAL !
   // creates event loop

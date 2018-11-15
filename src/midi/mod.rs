@@ -38,9 +38,9 @@ pub enum SyncMessage {
 // keeps time with midi and calculate useful values
 #[derive(Clone)]
 pub struct MidiTime {
-  tempo: f32,
-  ticks: u64, // tick counter
-  beats: f64,
+  pub tempo: f64,
+  pub ticks: u64, // tick counter
+  pub beats: f64,
   last_timecode: u64,
 } // implem
 impl MidiTime {
@@ -56,8 +56,8 @@ impl MidiTime {
     if self.last_timecode == 0 {
       self.last_timecode = tcode;
     } else {
-      let bpm = (tcode - self.last_timecode) as f32;
-      let bpm = (bpm / 1000.0) * PPQN as f32;
+      let bpm = (tcode - self.last_timecode) as f64;
+      let bpm = (bpm / 1000.0) * PPQN as f64;
       let bpm = 60_000.0 / bpm;
       self.tempo = bpm.round();
       self.last_timecode = tcode;
@@ -90,6 +90,14 @@ fn midi_sync_cb(tcode: u64, mid_data: &[u8], tx: &mut Bus<SyncMessage>) {
     }
     _ => (), // nothing
   }
+}
+
+fn broadcast_sync(bus: &mut Bus<CommandMessage>, message: SyncMessage, time: MidiTime) {
+    // send to audio tracks
+    bus.broadcast(CommandMessage::Playback(PlaybackMessage {
+      sync: message,
+      time: time,
+    }));
 }
 
 // initialize midi machinery
@@ -137,25 +145,20 @@ pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<CommandMessage>
           println!("midi: start");
           midi_time.restart();
           // send to audio tracks
-          outer_bus.broadcast(CommandMessage::Playback(PlaybackMessage {
-            sync: message,
-            time: midi_time.clone(),
-          }));
+          broadcast_sync(& mut outer_bus, message, midi_time.clone());
         }
         // stop received
         SyncMessage::Stop() => {
           println!("midi: stop");
           midi_time.restart();
           // send to audio tracks
-          outer_bus.broadcast(CommandMessage::Playback(PlaybackMessage {
-            sync: message,
-            time: midi_time.clone(),
-          }));
+          broadcast_sync(& mut outer_bus, message, midi_time.clone());
         }
         // tick received
         SyncMessage::Tick(tcode) => {
           midi_time.tick(tcode);
-          // println!("ticks: {}", midi_time.tick);
+          // send to audio tracks
+          broadcast_sync(& mut outer_bus, message, midi_time.clone());
         }
       }
     }

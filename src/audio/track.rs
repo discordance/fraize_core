@@ -1,27 +1,42 @@
 extern crate bus;
 extern crate hound;
 extern crate sample;
+extern crate time_calc;
+extern crate num;
 
-use std::ffi::OsStr;
+
 use std::path::Path;
 
+use self::num::ToPrimitive;
 use self::bus::BusReader;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::interpolate::Linear;
 use self::sample::{signal, Frame, Sample, Signal};
+use self::time_calc::{Samples};
 
 // @TODO this is ugly but what to do without generics ?
 type FramedSignal = signal::FromInterleavedSamplesIterator<std::vec::IntoIter<f32>, Stereo<f32>>;
 
 // helper that parses the number of beats of an audio sample in the filepath
+// @TODO Way to much unwarp here
 fn parse_filepath_beats(path: &str) -> i16 {
   // compute path
   let path_obj = Path::new(path);
   let file_stem = path_obj.file_stem().unwrap();
   let file_stem = file_stem.to_str().unwrap();
-  println!("file stem {}", file_stem);
-  return 0;
+  let split = file_stem.split("_");
+  let split: Vec<&str> = split.collect();
+  let beats = split[1].parse::<i16>().unwrap();
+  return beats;
+}
+
+fn parse_original_tempo(path: &str, num_samples: usize) -> f64 {
+  // compute number of beats
+  let beats = parse_filepath_beats(path);
+  let ms = Samples((num_samples as i64)/2).to_ms(44_100.0);
+  let secs = ms.to_f64().unwrap()/1000.0;
+  return 60.0/(secs/beats as f64)
 }
 
 // an audio track
@@ -30,12 +45,14 @@ pub struct AudioTrack {
   command_rx: BusReader<::midi::CommandMessage>,
   // original tempo of the loaded audio
   original_tempo: f64,
+  // playback_rate to match original_tempo
+  playback_rate: f64,  
   // the track is playring ?
   playing: bool,
   // volume of the track
   volume: f32,
   // how many frames have passed
-  elasped_frames: i64,
+  elasped_frames: u64,
   // original signal
   signal: FramedSignal,
   // iterator
@@ -47,6 +64,7 @@ impl AudioTrack {
     AudioTrack {
       command_rx,
       original_tempo: 120.0,
+      playback_rate: 1.0,
       playing: false,
       volume: 0.5,
       elasped_frames: 0,
@@ -57,8 +75,6 @@ impl AudioTrack {
 
   // load audio file
   pub fn load_file(&mut self, path: &str) {
-    // compute number of beats
-    parse_filepath_beats(path);
     // load some audio
     let reader = WavReader::open(path).unwrap();
 
@@ -69,8 +85,25 @@ impl AudioTrack {
       .map(i16::to_sample::<f32>)
       .collect();
 
+    // parse and set original tempo
+    let orig_tempo = parse_original_tempo(path, samples.len());
+    self.original_tempo = orig_tempo;
+
     // original signal, stereo framed, we keep it
     self.signal = signal::from_interleaved_samples_iter(samples);
+
+    // reloop to avoid clicks
+    self.reloop();
+  }
+
+  // change playback speed
+  fn respeed(&mut self) {
+    // for interpolation
+    let interp = Linear::from_source(&mut self.signal);
+    // iterator
+    println!("hehe {}", self.elasped_frames);
+    //(self.elasped_frames as f64 * self.playback_rate) as usize
+    self.signal_it = Box::new(self.signal.clone().scale_hz(interp, self.playback_rate).until_exhausted().skip((self.elasped_frames as f64 * self.playback_rate) as usize));
   }
 
   // reloop
@@ -80,7 +113,7 @@ impl AudioTrack {
     // for interpolation
     let interp = Linear::from_source(&mut self.signal);
     // iterator
-    self.signal_it = Box::new(self.signal.clone().scale_hz(interp, 0.9).until_exhausted());
+    self.signal_it = Box::new(self.signal.clone().scale_hz(interp, self.playback_rate).until_exhausted());
   }
 
   // fetch commands from rx
@@ -96,7 +129,15 @@ impl AudioTrack {
             self.playing = false;
             self.reloop();
           }
-          _ => (),
+          ::midi::SyncMessage::Tick(tick) => {
+            let rate = playback_message.time.tempo/self.original_tempo;
+            // changed tempo
+            if self.playback_rate != rate {
+              // println!("changed {}", playback_message.time.tempo);
+              self.playback_rate = rate;
+              self.respeed();
+            }
+          },
         },
       },
       _ => (),
