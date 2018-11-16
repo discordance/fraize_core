@@ -25,3 +25,5 @@ https://github.com/RustAudio/sample
 - https://github.com/mosmeh/accent
 
 ## ohhhh ? https://github.com/klangner/dsp
+
+## bpm https://github.com/AdamHarries/ellington

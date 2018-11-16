@@ -1,19 +1,20 @@
 extern crate bus;
 extern crate hound;
+extern crate num;
 extern crate sample;
 extern crate time_calc;
-extern crate num;
+extern crate elapsed;
 
 
 use std::path::Path;
 
-use self::num::ToPrimitive;
 use self::bus::BusReader;
 use self::hound::WavReader;
+use self::num::ToPrimitive;
 use self::sample::frame::Stereo;
-use self::sample::interpolate::Linear;
 use self::sample::{signal, Frame, Sample, Signal};
-use self::time_calc::{Samples};
+use self::sample::interpolate::{Converter, Linear};
+use self::time_calc::Samples;
 
 // @TODO this is ugly but what to do without generics ?
 type FramedSignal = signal::FromInterleavedSamplesIterator<std::vec::IntoIter<f32>, Stereo<f32>>;
@@ -34,9 +35,9 @@ fn parse_filepath_beats(path: &str) -> i16 {
 fn parse_original_tempo(path: &str, num_samples: usize) -> f64 {
   // compute number of beats
   let beats = parse_filepath_beats(path);
-  let ms = Samples((num_samples as i64)/2).to_ms(44_100.0);
-  let secs = ms.to_f64().unwrap()/1000.0;
-  return 60.0/(secs/beats as f64)
+  let ms = Samples((num_samples as i64) / 2).to_ms(44_100.0);
+  let secs = ms.to_f64().unwrap() / 1000.0;
+  return 60.0 / (secs / beats as f64);
 }
 
 // an audio track
@@ -46,30 +47,33 @@ pub struct AudioTrack {
   // original tempo of the loaded audio
   original_tempo: f64,
   // playback_rate to match original_tempo
-  playback_rate: f64,  
+  playback_rate: f64,
   // the track is playring ?
   playing: bool,
   // volume of the track
   volume: f32,
-  // how many frames have passed
-  elasped_frames: u64,
-  // original signal
-  signal: FramedSignal,
-  // iterator
-  signal_it: Box<Iterator<Item = Stereo<f32>> + Send + 'static>,
+  // original samples
+  samples: Vec<f32>,
+  // iterator / converter
+  sample_converter: Converter<FramedSignal, Linear<Stereo<f32>>>
 }
 impl AudioTrack {
   // constructor
   pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> AudioTrack {
+
+    // init dummy
+    let mut signal = signal::from_interleaved_samples_iter::<Vec<f32>, Stereo<f32>>(Vec::new());
+    let interp = Linear::from_source(&mut signal);
+    let conv = signal.scale_hz(interp, 1.0);
+
     AudioTrack {
       command_rx,
       original_tempo: 120.0,
       playback_rate: 1.0,
       playing: false,
       volume: 0.5,
-      elasped_frames: 0,
-      signal: signal::from_interleaved_samples_iter(Vec::new()),
-      signal_it: Box::new(sample::signal::equilibrium().until_exhausted()),
+      samples: Vec::new(),
+      sample_converter: conv
     }
   }
 
@@ -79,18 +83,15 @@ impl AudioTrack {
     let reader = WavReader::open(path).unwrap();
 
     // samples preparation
-    let samples: Vec<f32> = reader
+    self.samples = reader
       .into_samples::<i16>()
       .filter_map(Result::ok)
       .map(i16::to_sample::<f32>)
       .collect();
 
     // parse and set original tempo
-    let orig_tempo = parse_original_tempo(path, samples.len());
+    let orig_tempo = parse_original_tempo(path, self.samples.len());
     self.original_tempo = orig_tempo;
-
-    // original signal, stereo framed, we keep it
-    self.signal = signal::from_interleaved_samples_iter(samples);
 
     // reloop to avoid clicks
     self.reloop();
@@ -98,22 +99,21 @@ impl AudioTrack {
 
   // change playback speed
   fn respeed(&mut self) {
-    // for interpolation
-    let interp = Linear::from_source(&mut self.signal);
-    // iterator
-    println!("hehe {}", self.elasped_frames);
-    //(self.elasped_frames as f64 * self.playback_rate) as usize
-    self.signal_it = Box::new(self.signal.clone().scale_hz(interp, self.playback_rate).until_exhausted().skip((self.elasped_frames as f64 * self.playback_rate) as usize));
+    self.sample_converter.set_sample_hz_scale(1.0/self.playback_rate);
   }
 
-  // reloop
+  // reloop rewind the conv
   fn reloop(&mut self) {
-    // reset frame count
-    self.elasped_frames = 0;
+
+    // cook it
+    // efficent way to copy !??
+    let mut signal = signal::from_interleaved_samples_iter::<Vec<f32>, Stereo<f32>>(self.samples.clone());
+
     // for interpolation
-    let interp = Linear::from_source(&mut self.signal);
-    // iterator
-    self.signal_it = Box::new(self.signal.clone().scale_hz(interp, self.playback_rate).until_exhausted());
+    let interp = Linear::from_source(&mut signal);
+
+    let scaled = signal.scale_hz(interp, self.playback_rate);
+    self.sample_converter = scaled;
   }
 
   // fetch commands from rx
@@ -130,14 +130,13 @@ impl AudioTrack {
             self.reloop();
           }
           ::midi::SyncMessage::Tick(tick) => {
-            let rate = playback_message.time.tempo/self.original_tempo;
+            let rate = playback_message.time.tempo / self.original_tempo;
             // changed tempo
             if self.playback_rate != rate {
-              // println!("changed {}", playback_message.time.tempo);
               self.playback_rate = rate;
               self.respeed();
             }
-          },
+          }
         },
       },
       _ => (),
@@ -158,17 +157,16 @@ impl Iterator for AudioTrack {
     if !self.playing {
       return Some(Stereo::<f32>::equilibrium());
     }
-    // audio thread !!!
-    match self.signal_it.next() {
-      Some(frame) => {
-        self.elasped_frames += 1;
-        return Some(frame.scale_amp(self.volume));
-      }
-      None => {
-        // init
-        self.reloop();
-        return None;
-      }
+
+    // check if is exhansted
+    if self.sample_converter.is_exhausted() {
+      self.reloop();
+      return Some(Stereo::<f32>::equilibrium());
     }
+
+    // else next
+    let frame =  self.sample_converter.next();
+    return Some(frame);
+
   }
 }
