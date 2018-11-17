@@ -1,10 +1,9 @@
 extern crate bus;
+extern crate elapsed;
 extern crate hound;
 extern crate num;
 extern crate sample;
 extern crate time_calc;
-extern crate elapsed;
-
 
 use std::path::Path;
 
@@ -12,8 +11,8 @@ use self::bus::BusReader;
 use self::hound::WavReader;
 use self::num::ToPrimitive;
 use self::sample::frame::Stereo;
-use self::sample::{signal, Frame, Sample, Signal};
 use self::sample::interpolate::{Converter, Linear};
+use self::sample::{signal, Frame, Sample, Signal};
 use self::time_calc::Samples;
 
 // @TODO this is ugly but what to do without generics ?
@@ -55,12 +54,11 @@ pub struct AudioTrack {
   // original samples
   samples: Vec<f32>,
   // iterator / converter
-  sample_converter: Converter<FramedSignal, Linear<Stereo<f32>>>
+  sample_converter: Converter<FramedSignal, Linear<Stereo<f32>>>,
 }
 impl AudioTrack {
   // constructor
   pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> AudioTrack {
-
     // init dummy
     let mut signal = signal::from_interleaved_samples_iter::<Vec<f32>, Stereo<f32>>(Vec::new());
     let interp = Linear::from_source(&mut signal);
@@ -73,8 +71,13 @@ impl AudioTrack {
       playing: false,
       volume: 0.5,
       samples: Vec::new(),
-      sample_converter: conv
+      sample_converter: conv,
     }
+  }
+
+  // returns a buffer insead of frames one by one
+  pub fn next_block(&mut self, size: usize) -> Vec<Stereo<f32>> {
+    return self.take(size).collect();
   }
 
   // load audio file
@@ -99,15 +102,17 @@ impl AudioTrack {
 
   // change playback speed
   fn respeed(&mut self) {
-    self.sample_converter.set_sample_hz_scale(1.0/self.playback_rate);
+    self
+      .sample_converter
+      .set_sample_hz_scale(1.0 / self.playback_rate);
   }
 
   // reloop rewind the conv
   fn reloop(&mut self) {
-
     // cook it
     // efficent way to copy !??
-    let mut signal = signal::from_interleaved_samples_iter::<Vec<f32>, Stereo<f32>>(self.samples.clone());
+    let mut signal =
+      signal::from_interleaved_samples_iter::<Vec<f32>, Stereo<f32>>(self.samples.clone());
 
     // for interpolation
     let interp = Linear::from_source(&mut signal);
@@ -165,8 +170,7 @@ impl Iterator for AudioTrack {
     }
 
     // else next
-    let frame =  self.sample_converter.next();
+    let frame = self.sample_converter.next();
     return Some(frame);
-
   }
 }
