@@ -31,7 +31,7 @@ https://github.com/RustAudio/sample
 
 - https://github.com/mosmeh/accent
 
-## dsp with poor doc RSUT
+## dsp with poor doc RUST
 
 - https://github.com/klangner/dsp
 

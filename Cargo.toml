@@ -1,7 +1,7 @@
 [package]
 name = "smplr"
 version = "0.1.0"
-authors = ["Aymeric Nunge <nunja@free.fr>"]
+authors = ["Aymeric Nungee <nunja@free.fr>"]
 
 [dependencies]
 rand = "0.3.14"
