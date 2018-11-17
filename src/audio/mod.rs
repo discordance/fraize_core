@@ -3,6 +3,7 @@ extern crate cpal;
 extern crate sample;
 
 mod track;
+mod filters;
 
 use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};

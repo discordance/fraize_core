@@ -77,7 +77,9 @@ impl AudioTrack {
 
   // returns a buffer insead of frames one by one
   pub fn next_block(&mut self, size: usize) -> Vec<Stereo<f32>> {
-    return self.take(size).collect();
+    let mut audio_buffer = self.take(size).collect();
+    // process this malaka
+    return audio_buffer;
   }
 
   // load audio file

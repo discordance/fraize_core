@@ -7,23 +7,39 @@
 - pvoc-rs
 
 
-## THIS IS FREAK DSP
+## Some FX in RUST
+
+- http://rickyhan.com/jekyll/update/2018/02/06/rust-guitar-pedal-effects-dsp.html
+
+## We use this as basics RUST
+
 https://github.com/RustAudio/sample
 
-## BEAT Detection
+## BEAT Detection (C++)
 
 - AUFTAKT SDK 3.2.6
-- https://github.com/tzaeru/rust-audio-analysis ??? < too basic>
 
-## C++ to be used ?
+## Audio Analysis in C++
+
 - https://github.com/adamstark/Gist
 
-## MIND FUCK
+## Full of stuff RUST
+
 - https://github.com/MindBuffer?fbclid=IwAR3W2WNqQ3THNnbvYYSclDYY3VUo62LyB-1AEr_Oeg2xFndxOOQ-4JElD9A
 
-## REVERBZ !
+## reverbs RUST
+
 - https://github.com/mosmeh/accent
 
-## ohhhh ? https://github.com/klangner/dsp
+## dsp with poor doc RSUT
 
-## bpm https://github.com/AdamHarries/ellington
+- https://github.com/klangner/dsp
+
+## bpm jazz (C++)
+
+https://github.com/AdamHarries/ellington
+
+
+## opensource fully featured (C++)
+
+- https://github.com/Tracktion/tracktion_engine
