@@ -15,6 +15,8 @@ use self::sample::interpolate::{Converter, Linear};
 use self::sample::{signal, Frame, Sample, Signal};
 use self::time_calc::Samples;
 
+use audio::filters::{FilterOp, FilterType, BiquadFilter};
+
 // @TODO this is ugly but what to do without generics ?
 type FramedSignal = signal::FromInterleavedSamplesIterator<std::vec::IntoIter<f32>, Stereo<f32>>;
 
@@ -55,14 +57,29 @@ pub struct AudioTrack {
   samples: Vec<f32>,
   // iterator / converter
   sample_converter: Converter<FramedSignal, Linear<Stereo<f32>>>,
+  // filter bank
+  filter_bank: BiquadFilter
 }
 impl AudioTrack {
   // constructor
   pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> AudioTrack {
+    
     // init dummy
     let mut signal = signal::from_interleaved_samples_iter::<Vec<f32>, Stereo<f32>>(Vec::new());
     let interp = Linear::from_source(&mut signal);
     let conv = signal.scale_hz(interp, 1.0);
+
+    // filter
+    let filter = BiquadFilter::create_filter(
+      FilterType::LowPass(),
+      FilterOp::UseQ(),
+      44_100.0, // rate
+      1000.0, // cutoff
+      1.0, // db gain
+      1.0, // q
+      1.0, // bw
+      1.0 //slope
+    );
 
     AudioTrack {
       command_rx,
@@ -72,6 +89,7 @@ impl AudioTrack {
       volume: 0.5,
       samples: Vec::new(),
       sample_converter: conv,
+      filter_bank: filter
     }
   }
 
@@ -173,6 +191,8 @@ impl Iterator for AudioTrack {
 
     // else next
     let frame = self.sample_converter.next();
-    return Some(frame);
+
+    // filter pass
+    return Some(self.filter_bank.process(frame));
   }
 }
