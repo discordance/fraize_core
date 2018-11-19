@@ -50,6 +50,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "aubio"
+version = "0.1.0"
+
+[[package]]
 name = "bindgen"
 version = "0.32.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -531,6 +535,7 @@ dependencies = [
 name = "smplr"
 version = "0.1.0"
 dependencies = [
+ "aubio 0.1.0",
  "bus 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cpal 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "elapsed 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",

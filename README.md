@@ -1,5 +1,9 @@
 # SAMPLER LIKE
 
+## current ffi deps (the least the better)
+
+- aubio
+
 ## Interesting Deps
 
 - rodio

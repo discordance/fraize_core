@@ -5,41 +5,17 @@ extern crate num;
 extern crate sample;
 extern crate time_calc;
 
-use std::path::Path;
-
 use self::bus::BusReader;
 use self::hound::WavReader;
-use self::num::ToPrimitive;
 use self::sample::frame::Stereo;
 use self::sample::interpolate::{Converter, Linear};
 use self::sample::{signal, Frame, Sample, Signal};
-use self::time_calc::Samples;
 
 use audio::filters::{FilterOp, FilterType, BiquadFilter};
+use audio::track_utils;
 
 // @TODO this is ugly but what to do without generics ?
 type FramedSignal = signal::FromInterleavedSamplesIterator<std::vec::IntoIter<f32>, Stereo<f32>>;
-
-// helper that parses the number of beats of an audio sample in the filepath
-// @TODO Way to much unwarp here
-fn parse_filepath_beats(path: &str) -> i16 {
-  // compute path
-  let path_obj = Path::new(path);
-  let file_stem = path_obj.file_stem().unwrap();
-  let file_stem = file_stem.to_str().unwrap();
-  let split = file_stem.split("_");
-  let split: Vec<&str> = split.collect();
-  let beats = split[1].parse::<i16>().unwrap();
-  return beats;
-}
-
-fn parse_original_tempo(path: &str, num_samples: usize) -> f64 {
-  // compute number of beats
-  let beats = parse_filepath_beats(path);
-  let ms = Samples((num_samples as i64) / 2).to_ms(44_100.0);
-  let secs = ms.to_f64().unwrap() / 1000.0;
-  return 60.0 / (secs / beats as f64);
-}
 
 // an audio track
 pub struct BasicAudioTrack {
@@ -117,7 +93,7 @@ impl BasicAudioTrack {
       .collect();
 
     // parse and set original tempo
-    let orig_tempo = parse_original_tempo(path, self.samples.len());
+    let orig_tempo = track_utils::parse_original_tempo(path, self.samples.len());
     self.original_tempo = orig_tempo;
 
     // reloop to avoid clicks

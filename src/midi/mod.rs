@@ -92,12 +92,14 @@ fn midi_sync_cb(tcode: u64, mid_data: &[u8], tx: &mut Bus<SyncMessage>) {
   }
 }
 
+// broadcast sync to audio tracks! 
+// @TODO its blocking <------ should be non block ?
 fn broadcast_sync(bus: &mut Bus<CommandMessage>, message: SyncMessage, time: MidiTime) {
-    // send to audio tracks
-    bus.broadcast(CommandMessage::Playback(PlaybackMessage {
-      sync: message,
-      time: time,
-    }));
+  // send to audio tracks
+  bus.broadcast(CommandMessage::Playback(PlaybackMessage {
+    sync: message,
+    time: time,
+  }));
 }
 
 // initialize midi machinery
@@ -145,20 +147,20 @@ pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<CommandMessage>
           println!("midi: start");
           midi_time.restart();
           // send to audio tracks
-          broadcast_sync(& mut outer_bus, message, midi_time.clone());
+          broadcast_sync(&mut outer_bus, message, midi_time.clone());
         }
         // stop received
         SyncMessage::Stop() => {
           println!("midi: stop");
           midi_time.restart();
           // send to audio tracks
-          broadcast_sync(& mut outer_bus, message, midi_time.clone());
+          broadcast_sync(&mut outer_bus, message, midi_time.clone());
         }
         // tick received
         SyncMessage::Tick(tcode) => {
           midi_time.tick(tcode);
           // send to audio tracks
-          broadcast_sync(& mut outer_bus, message, midi_time.clone());
+          broadcast_sync(&mut outer_bus, message, midi_time.clone());
         }
       }
     }
