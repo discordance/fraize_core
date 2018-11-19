@@ -43,7 +43,7 @@ pub fn detect_bpm(samples: Vec<f32>) -> f32 {
 }
 
 // onset detector via aubio <3
-pub fn detect_onsets(samples: Vec<f32>) -> Vec<f32> {
+pub fn detect_onsets(samples: Vec<f32>) -> Vec<u32> {
 
   let mono: Vec<f32> = samples.into_iter().step_by(2).collect();
   let mut chunk_iter = mono.chunks(HOP_SIZE);
@@ -57,10 +57,13 @@ pub fn detect_onsets(samples: Vec<f32>) -> Vec<f32> {
   onset.set_minioi(0.1);
 
   // save position in seconds (we can get that in samples later)
-  let mut positions: Vec<f32> = Vec::new();
+  let mut positions: Vec<u32> = Vec::new();
 
+  // zero by default
+  positions.push(0);
+  
   // track
-  let mut latest_detection = -1.0;
+  let mut latest_detection = 0;
 
   loop {
     let next = chunk_iter.next();
@@ -71,9 +74,9 @@ pub fn detect_onsets(samples: Vec<f32>) -> Vec<f32> {
           break;
         }
         onset.execute(&chunk);
-        let mut detected = onset.last_onset_s();
+        let mut detected = onset.last_onset();
         // round
-        detected = (detected * 1000.0).round() / 1000.0;
+        // detected = (detected * 1000.0).round() / 1000.0;
         if latest_detection < detected {
           positions.push(detected);
           latest_detection = detected;

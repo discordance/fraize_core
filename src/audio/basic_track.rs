@@ -134,7 +134,7 @@ impl BasicAudioTrack {
             self.playing = false;
             self.reloop();
           }
-          ::midi::SyncMessage::Tick(tick) => {
+          ::midi::SyncMessage::Tick(_tick) => {
             let rate = playback_message.time.tempo / self.original_tempo;
             // changed tempo
             if self.playback_rate != rate {
