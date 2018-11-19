@@ -42,7 +42,7 @@ fn parse_original_tempo(path: &str, num_samples: usize) -> f64 {
 }
 
 // an audio track
-pub struct AudioTrack {
+pub struct BasicAudioTrack {
   // commands rx
   command_rx: BusReader<::midi::CommandMessage>,
   // original tempo of the loaded audio
@@ -60,9 +60,9 @@ pub struct AudioTrack {
   // filter bank
   filter_bank: BiquadFilter
 }
-impl AudioTrack {
+impl BasicAudioTrack {
   // constructor
-  pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> AudioTrack {
+  pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> BasicAudioTrack {
     
     // init dummy
     let mut signal = signal::from_interleaved_samples_iter::<Vec<f32>, Stereo<f32>>(Vec::new());
@@ -76,12 +76,12 @@ impl AudioTrack {
       44_100.0, // rate
       1000.0, // cutoff
       1.0, // db gain
-      1.0, // q
+      2.0, // q
       1.0, // bw
       1.0 //slope
     );
 
-    AudioTrack {
+    BasicAudioTrack {
       command_rx,
       original_tempo: 120.0,
       playback_rate: 1.0,
@@ -95,8 +95,12 @@ impl AudioTrack {
 
   // returns a buffer insead of frames one by one
   pub fn next_block(&mut self, size: usize) -> Vec<Stereo<f32>> {
-    let mut audio_buffer = self.take(size).collect();
-    // process this malaka
+    // take the slice
+    let audio_buffer = self.take(size).collect();
+    /*
+     * HERE WE CAN PROCESS BY CHUNK
+     */
+    // send full buffer
     return audio_buffer;
   }
 
@@ -170,7 +174,7 @@ impl AudioTrack {
 }
 
 // Implement `Iterator` for `AudioTrack`.
-impl Iterator for AudioTrack {
+impl Iterator for BasicAudioTrack {
   type Item = Stereo<f32>;
 
   // next!
@@ -183,7 +187,7 @@ impl Iterator for AudioTrack {
       return Some(Stereo::<f32>::equilibrium());
     }
 
-    // check if is exhansted
+    // check if iterator is exhausted
     if self.sample_converter.is_exhausted() {
       self.reloop();
       return Some(Stereo::<f32>::equilibrium());
@@ -192,7 +196,13 @@ impl Iterator for AudioTrack {
     // else next
     let frame = self.sample_converter.next();
 
-    // filter pass
-    return Some(self.filter_bank.process(frame));
+     /*
+     * HERE WE CAN PROCESS BY FRAME
+     */
+    // FILTER BANK
+    let frame = self.filter_bank.process(frame);
+
+    // yield with the volume post fx
+    return Some(frame.scale_amp(self.volume));
   }
 }

@@ -2,19 +2,20 @@ extern crate bus;
 extern crate cpal;
 extern crate sample;
 
-mod track;
+mod basic_track;
 mod filters;
 
 use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
 use self::sample::frame::{Frame, Stereo};
 use self::sample::ToFrameSliceMut;
-use self::track::AudioTrack;
+use self::basic_track::BasicAudioTrack;
 
 // initialize audio machinery
 pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
+
   // init our beautiful test audiotrack
-  let mut audio_track = AudioTrack::new(midi_rx);
+  let mut audio_track = BasicAudioTrack::new(midi_rx);
   audio_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
   // init audio with CPAL !

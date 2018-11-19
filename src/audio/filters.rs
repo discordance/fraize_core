@@ -52,7 +52,9 @@ pub struct BiquadFilter {
 }
 
 impl BiquadFilter {
+
   // computes and return a biquad filter
+  #[inline(always)]
   pub fn create_filter(
     filter_type: FilterType,
     filter_opt: FilterOp,
@@ -189,6 +191,7 @@ impl BiquadFilter {
   }
 
   // process
+  #[inline(always)]
   pub fn process(&mut self, frame: Stereo<f32>) -> Stereo<f32> {
    
     // ->

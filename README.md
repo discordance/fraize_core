@@ -6,6 +6,13 @@
 - midir
 - pvoc-rs
 
+## audio analysis with onset RUST
+
+- https://github.com/meh/male
+
+## full of C FX (c)
+
+- https://github.com/graue/synth
 
 ## Some FX in RUST
 
@@ -19,7 +26,7 @@ https://github.com/RustAudio/sample
 
 - AUFTAKT SDK 3.2.6
 
-## Audio Analysis in C++
+## Audio Analysis (C++)
 
 - https://github.com/adamstark/Gist
 
