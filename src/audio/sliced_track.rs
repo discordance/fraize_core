@@ -5,7 +5,7 @@ extern crate sample;
 use self::bus::BusReader;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
-use self::sample::{signal, Frame, Sample, Signal};
+use self::sample::{Frame, Sample, Signal};
 
 use audio::analytics;
 use audio::track_utils;
@@ -22,12 +22,12 @@ pub struct SlicedAudioTrack {
   playing: bool,
   // volume of the track
   volume: f32,
+  // elapsed frames
+  elapsed_frames: u32,
   // onset positions
   positions: Vec<u32>,
-  // original samples
-  samples: Vec<f32>,
-  // iterator
-  signal_it : Box<Iterator<Item = Stereo<f32>> + Send>
+  // original samples, framed
+  frames: Vec<Stereo<f32>>,
 }
 impl SlicedAudioTrack {
   // constructor
@@ -38,9 +38,9 @@ impl SlicedAudioTrack {
       playback_rate: 1.0,
       playing: false,
       volume: 0.5,
-      positions: vec![],
-      samples: vec![],
-      signal_it: Box::new(vec![].into_iter()),
+      elapsed_frames: 0,
+      positions: Vec::new(),
+      frames: Vec::new(),
     }
   }
 
@@ -49,63 +49,53 @@ impl SlicedAudioTrack {
     // load some audio
     let reader = WavReader::open(path).unwrap();
 
-    // samples preparation
-    self.samples = reader
+    // samples conv from 16bit to f32
+    let mut samples: Vec<f32> = reader
       .into_samples::<i16>()
       .filter_map(Result::ok)
       .map(i16::to_sample::<f32>)
       .collect();
 
-    // parse and set original tempo
-    let orig_tempo = track_utils::parse_original_tempo(path, self.samples.len());
-    self.original_tempo = orig_tempo;
+    println!("len samples {}", samples.len()); 
 
     // send for analytics :p
-    self.positions = analytics::detect_onsets(self.samples.clone());
+    self.positions = analytics::detect_onsets(samples.clone());
 
-    // reloop
-    self.reloop();
+    // convert to stereo frames
+    self.frames = track_utils::to_stereo(samples); 
+
+    // parse and set original tempo
+    let orig_tempo = track_utils::parse_original_tempo(path, self.frames.len());
+    self.original_tempo = orig_tempo;
+
+    // setup
+    self.slice();
   }
 
   // reloop rewind the conv
   // abusing boxes
-  fn reloop(&mut self) {
-    let mut signal_slice = self.samples.clone().into_boxed_slice();
-    let sig_framed: Box<[Stereo<f32>]> = sample::slice::to_boxed_frame_slice(signal_slice).unwrap();
+  pub fn slice(&mut self) {
 
-    let mut sig_it: Box<Iterator<Item = &Stereo<f32>>> =
-      Box::new(sig_framed.iter().take(0).chain(&[][..]));
+    // let mut mutable_iter = self.signal_iter;
+    // *mutable_iter = self.frames.iter().cloned();
 
-    // // init
-    let mut last_pos = 0;
+    // let mut last_pos = 0;
 
-    // stucturate
-    for pos in self.positions.iter() {
-      // jump
-      if *pos == 0 {
-        continue;
-      }
-
-      // compute the slided sample position according to current playback_rate
-      let last_slided_pos = ((last_pos as f64) * 1.0 / self.playback_rate) as usize;
-      let next_slided_pos = ((*pos as f64) * 1.0 / self.playback_rate) as usize;
-      // println!("pos {} {}", pos, slided_pos);
-
-      if *pos as usize >= next_slided_pos {
-        sig_it = Box::new(
-          sig_it.chain(
-            sig_framed
-              .iter()
-              .skip(last_slided_pos)
-              .take(next_slided_pos),
-          ),
-        );
-      }
-      last_pos = *pos;
-    }
-
-    let total: Vec<Stereo<f32>> = sig_it.cloned().collect();
-    self.signal_it = Box::new(total.into_iter());
+    // for pos in self.positions.iter() {
+    //   // jump
+    //   if *pos == 0 {
+    //     continue;
+    //   }
+    //   let new_pos = *pos as usize;
+    //   if self.elapsed_frames < *pos {
+    //     self.signal_it = Arc::new(signal.skip(last_pos).take(new_pos-last_pos));
+    //     return;
+    //   }
+    //   last_pos = new_pos;
+    // }
+    //   // compute the slided sample position according to current playback_rate
+    //   let last_slided_pos = ((last_pos as f64) * 1.0 / self.playback_rate) as usize;
+    //   let next_slided_pos = ((*pos as f64) * 1.0 / self.playback_rate) as usize;
   }
 
   // fetch commands from rx
@@ -114,19 +104,21 @@ impl SlicedAudioTrack {
       Ok(command) => match command {
         ::midi::CommandMessage::Playback(playback_message) => match playback_message.sync {
           ::midi::SyncMessage::Start() => {
-            self.reloop();
+            self.elapsed_frames = 0;
             self.playing = true;
+            // self.slice();
           }
           ::midi::SyncMessage::Stop() => {
+            self.elapsed_frames = 0;
             self.playing = false;
-            self.reloop();
+            // self.slice();
           }
           ::midi::SyncMessage::Tick(_tick) => {
             let rate = playback_message.time.tempo / self.original_tempo;
             // changed tempo
             if self.playback_rate != rate {
               self.playback_rate = rate;
-              self.reloop();
+              // self.slice();
             }
           }
         },
@@ -153,39 +145,21 @@ impl Iterator for SlicedAudioTrack {
 
   // next!
   fn next(&mut self) -> Option<Self::Item> {
+    
     // non blocking command fetch
     self.fetch_commands();
 
-    // println!("whas {}", self.signal_it.next().unwrap()[0]);
-    match self.signal_it.next() {
-      Some(frame) => return Some(frame),
-      None => {
-        self.reloop();
-        return Some(Stereo::<f32>::equilibrium())
-      }
+    // doesnt consume if not playing
+    if !self.playing {
+      return Some(Stereo::<f32>::equilibrium());
     }
 
-    // doesnt consume if not playing
-    // if !self.playing {
-    // return Some(Stereo::<f32>::equilibrium());
+    let next_frame = self.frames[self.elapsed_frames as usize];
+    self.elapsed_frames += 1;
+    return Some(next_frame);
+    // match next_frame {
+    //   Some(f) => return Some(f),
+    //   None => return Some(Stereo::<f32>::equilibrium()),
     // }
-
-    // // check if iterator is exhausted
-    // if self.sample_converter.is_exhausted() {
-    //   self.reloop();
-    //   return Some(Stereo::<f32>::equilibrium());
-    // }
-
-    // // else next
-    // let frame = self.sample_converter.next();
-
-    //  /*
-    //  * HERE WE CAN PROCESS BY FRAME
-    //  */
-    // // FILTER BANK
-    // let frame = self.filter_bank.process(frame);
-
-    // // yield with the volume post fx
-    // return Some(frame.scale_amp(self.volume));
   }
 }

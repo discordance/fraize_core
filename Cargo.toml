@@ -13,6 +13,7 @@ hound = "3.4.0"
 sample = "0.10.0"
 num = "0.1.28"
 elapsed = "0.1"
-# aubio = "0.1.0"
+itertools = "0.7.9"
+
 [dependencies.aubio]
 path = "../aubio-rs"

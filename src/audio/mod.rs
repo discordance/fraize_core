@@ -2,6 +2,8 @@ extern crate bus;
 extern crate cpal;
 extern crate sample;
 
+use std::sync::Arc;
+
 mod basic_track;
 mod analytics;
 mod sliced_track;
@@ -25,7 +27,6 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
   // test sliced
   let mut sliced_track = SlicedAudioTrack::new(midi_rx);
   sliced_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
-  // sliced_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loopdemerde_4.wav");
 
   // init audio with CPAL !
   // creates event loop
@@ -60,21 +61,26 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
 
   // audio callback
   event_loop.run(move |_stream_id, stream_data| {
+
     match stream_data {
       StreamData::Output {
         buffer: UnknownTypeOutputBuffer::F32(mut buffer),
       } => {
+        
         // here we implement the trait sample::ToFrameSliceMut;
         // we can take a mutable buffer from the audio callback, but framed in stereo !!
         let buffer: &mut [Stereo<f32>] = buffer.to_frame_slice_mut().unwrap();
-
         // audio tracks can be requested by block of buffer len
         let size = buffer.len();
+
+        // let re = &sliced_track;
+        // sliced_track;
         let next_block = sliced_track.next_block(size);
-        // create a mutable iterator
+        // // create a mutable iterator
         let mut it = next_block.iter();
-        // inject the frames out
+        // // inject the frames out
         for out_frame in buffer {
+          // *out_frame = Stereo::<f32>::equilibrium(); // DEBUG
           match it.next() {
             Some(frame) => *out_frame = *frame,
             None => {

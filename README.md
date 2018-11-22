@@ -54,3 +54,10 @@ https://github.com/AdamHarries/ellington
 ## opensource fully featured (C++)
 
 - https://github.com/Tracktion/tracktion_engine
+
+## what's that ->
+- https://en.wikipedia.org/wiki/Non-negative_matrix_factorization
+
+## exemple of nmf
+
+- https://gist.github.com/ingle/93de575aac6a4c7fe9ee5f3d5adab98f
