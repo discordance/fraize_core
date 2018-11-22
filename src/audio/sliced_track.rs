@@ -56,8 +56,6 @@ impl SlicedAudioTrack {
       .map(i16::to_sample::<f32>)
       .collect();
 
-    println!("len samples {}", samples.len()); 
-
     // send for analytics :p
     self.positions = analytics::detect_onsets(samples.clone());
 
@@ -67,11 +65,12 @@ impl SlicedAudioTrack {
     // parse and set original tempo
     let orig_tempo = track_utils::parse_original_tempo(path, self.frames.len());
     self.original_tempo = orig_tempo;
-
-    // setup
-    self.slice();
   }
-
+  
+  fn compute_next_frame(&self) -> Stereo<f32> {
+    let len = self.frames.len();
+    return self.frames[self.elapsed_frames as usize % len];
+  }
   // reloop rewind the conv
   // abusing boxes
   pub fn slice(&mut self) {
@@ -146,20 +145,21 @@ impl Iterator for SlicedAudioTrack {
   // next!
   fn next(&mut self) -> Option<Self::Item> {
     
-    // non blocking command fetch
+    // non blocking midi command fetch
     self.fetch_commands();
 
-    // doesnt consume if not playing
+    // does not consume extra cpu if not playing
     if !self.playing {
       return Some(Stereo::<f32>::equilibrium());
     }
 
-    let next_frame = self.frames[self.elapsed_frames as usize];
+    // compute next frame
+    let next_frame = self.compute_next_frame();
+
+    // inc
     self.elapsed_frames += 1;
+
+    // return to iter
     return Some(next_frame);
-    // match next_frame {
-    //   Some(f) => return Some(f),
-    //   None => return Some(Stereo::<f32>::equilibrium()),
-    // }
   }
 }
