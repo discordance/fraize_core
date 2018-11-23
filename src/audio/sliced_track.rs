@@ -1,14 +1,18 @@
 extern crate bus;
 extern crate hound;
 extern crate sample;
+extern crate time_calc;
 
 use self::bus::BusReader;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
-use self::sample::{Frame, Sample, Signal};
+use self::sample::{Frame, Sample};
+use self::time_calc::{Beats, Ppqn, Ticks};
 
 use audio::analytics;
 use audio::track_utils;
+
+const PPQN: Ppqn = 24;
 
 // a slicer track
 pub struct SlicedAudioTrack {
@@ -22,12 +26,16 @@ pub struct SlicedAudioTrack {
   playing: bool,
   // volume of the track
   volume: f32,
-  // elapsed frames
+  // elapsed frames as requested by audio
   elapsed_frames: u64,
-  // current ticks
-  cursor: u64,
+  // current clock ticks
+  ticks: u64,
   // onset positions
   positions: Vec<u32>,
+  // prev slice memory
+  pslice: usize,
+  // cursor in the buffer
+  cursor: i64,
   // original samples, framed
   frames: Vec<Stereo<f32>>,
 }
@@ -36,19 +44,24 @@ impl SlicedAudioTrack {
   pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> SlicedAudioTrack {
     SlicedAudioTrack {
       command_rx,
-      original_tempo: 130.0,
+      original_tempo: 120.0,
       playback_rate: 1.0,
       playing: false,
       volume: 0.5,
       elapsed_frames: 0,
-      cursor: 0,
+      ticks: 0,
       positions: Vec::new(),
+      pslice: 0,
+      cursor: 0,
       frames: Vec::new(),
     }
   }
 
-  fn reset (&mut self) {
+  // reset counters
+  fn reset(&mut self) {
     self.elapsed_frames = 0;
+    self.ticks = 0;
+    self.pslice = self.positions.len() - 1;
     self.cursor = 0;
   }
 
@@ -65,7 +78,7 @@ impl SlicedAudioTrack {
       .collect();
 
     // parse and set original tempo
-    let orig_tempo = track_utils::parse_original_tempo(path, samples.len());
+    let (orig_tempo, beats) = track_utils::parse_original_tempo(path, samples.len());
     self.original_tempo = orig_tempo;
 
     // send for analytics :p
@@ -74,20 +87,85 @@ impl SlicedAudioTrack {
     // convert to stereo frames
     self.frames = track_utils::to_stereo(samples);
 
+    // last postition
+    self.positions.push(self.frames.len() as u32);
+
+    //
     self.reset();
   }
 
   #[inline(always)]
-  fn compute_next_frame(&mut self) -> Stereo<f32> {
-    println!("t {}", self.cursor);
+  fn compute_next_frame(&mut self, tick_frame: bool) -> Stereo<f32> {
+    // total number of frames in the buffer
+    let num_frames = self.frames.len() as i64;
+
+    // number of slices
+    let num_slices = self.positions.len() as i64;
+
+    // how many frames elapsed from the clock point of view
+    let clock_frames = Ticks(self.ticks as i64).samples(
+      1.0 / self.playback_rate * self.original_tempo,
+      PPQN,
+      44_100.0,
+    ) as i64;
+
+    // drift of ext clock vs sample reading in absolute
+    let drift = clock_frames - self.elapsed_frames as i64;
+
+    // cycles
+    let cycle = (clock_frames as f32 / num_frames as f32) as i64;
+
+    // next slice
+    let next_slice = self
+      .positions
+      .iter()
+      .position(|&x| x as i64 + (cycle * num_frames) > clock_frames);
+    let next_slice = match next_slice {
+      Some(idx) => idx,
+      None => 0,
+    };
+
+    // curr slice
+    let curr_slice = (next_slice as i64 - 1) % num_slices;
+
+    if self.pslice != curr_slice as usize {
+      // reset cursor
+      self.cursor = 0;
+      self.pslice = curr_slice as usize;
+    }
+
+    let mut slice_len = 1+(self.positions[next_slice as usize] - self.positions[curr_slice as usize]);
+
+    // if self.elapsed_frames % 1024 == 0{
+    //   println!("{}",slice_len);
+    // }
+    
+    // we have still samples to read
+    if (slice_len as i64 - self.cursor) > 0 {
+      self.cursor += 1;
+    }
+
+    // increment of counters
+    if tick_frame {
+      self.ticks += 1;
+    }
+    // usefoul ?
     self.elapsed_frames += 1;
-    return Stereo::<f32>::equilibrium()
+    let mut findex = self.cursor as u32 + self.positions[curr_slice as usize];
+    findex = findex % num_frames as u32;
+
+    let next_frame = self.frames[findex as usize];
+    return next_frame;
   }
 
-  // fetch commands from rx
-  fn fetch_commands(&mut self) {
+  // fetch commands from rx, return true if received tick for latter sync
+  fn fetch_commands(&mut self) -> bool {
+    // init tick flag
+    let mut tick_received = false;
+
     match self.command_rx.try_recv() {
       Ok(command) => match command {
+        // fetch playback
         ::midi::CommandMessage::Playback(playback_message) => match playback_message.sync {
           ::midi::SyncMessage::Start() => {
             self.reset();
@@ -97,18 +175,23 @@ impl SlicedAudioTrack {
             self.reset();
             self.playing = false;
           }
-          ::midi::SyncMessage::Tick(tick) => {
-            self.cursor = tick;
+          ::midi::SyncMessage::Tick(_tick) => {
             let rate = playback_message.time.tempo / self.original_tempo;
             // changed tempo
             if self.playback_rate != rate {
               self.playback_rate = rate;
             }
+
+            // we received a tick, but we need to inc it later
+            tick_received = true;
           }
         },
       },
       _ => (),
     };
+
+    // return tick received
+    return tick_received;
   }
 
   // returns a buffer insead of frames one by one
@@ -130,7 +213,7 @@ impl Iterator for SlicedAudioTrack {
   // next!
   fn next(&mut self) -> Option<Self::Item> {
     // non blocking midi command fetch
-    self.fetch_commands();
+    let tick_frame = self.fetch_commands();
 
     // does not consume extra cpu if not playing
     if !self.playing {
@@ -138,7 +221,7 @@ impl Iterator for SlicedAudioTrack {
     }
 
     // compute next frame
-    let next_frame = self.compute_next_frame();
+    let next_frame = self.compute_next_frame(tick_frame);
 
     // return to iter
     return Some(next_frame);

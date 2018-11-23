@@ -69,7 +69,7 @@ impl MidiTime {
     self.beats = Ticks(self.ticks as i64).beats(PPQN);
 
     if (self.beats / 4.0) % 1.0 == 0.0 {
-      println!("midi: BAR at beat {}", self.beats);
+      // println!("midi: BAR at beat {}", self.beats);
     }
     // calcu
   }

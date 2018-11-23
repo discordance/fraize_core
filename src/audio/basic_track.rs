@@ -93,7 +93,7 @@ impl BasicAudioTrack {
       .collect();
 
     // parse and set original tempo
-    let orig_tempo = track_utils::parse_original_tempo(path, self.samples.len());
+    let (orig_tempo, _beats) = track_utils::parse_original_tempo(path, self.samples.len());
     self.original_tempo = orig_tempo;
 
     // reloop to avoid clicks
