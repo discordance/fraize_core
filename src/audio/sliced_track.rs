@@ -24,8 +24,12 @@ pub struct SlicedAudioTrack {
   volume: f32,
   // elapsed frames
   elapsed_frames: u32,
+  // current pos in slices
+  cursor: u32,
   // onset positions
   positions: Vec<u32>,
+  // last onset
+  last_onset: u32,
   // original samples, framed
   frames: Vec<Stereo<f32>>,
 }
@@ -39,9 +43,17 @@ impl SlicedAudioTrack {
       playing: false,
       volume: 0.5,
       elapsed_frames: 0,
+      cursor: 0,
       positions: Vec::new(),
+      last_onset: 0,
       frames: Vec::new(),
     }
+  }
+
+  fn reset (&mut self) {
+    self.elapsed_frames = 0;
+    self.cursor = 0;
+    self.last_onset = 0;
   }
 
   // load audio file
@@ -56,45 +68,69 @@ impl SlicedAudioTrack {
       .map(i16::to_sample::<f32>)
       .collect();
 
+    // parse and set original tempo
+    let orig_tempo = track_utils::parse_original_tempo(path, samples.len());
+    self.original_tempo = orig_tempo;
+
     // send for analytics :p
     self.positions = analytics::detect_onsets(samples.clone());
 
     // convert to stereo frames
-    self.frames = track_utils::to_stereo(samples); 
+    self.frames = track_utils::to_stereo(samples);
 
-    // parse and set original tempo
-    let orig_tempo = track_utils::parse_original_tempo(path, self.frames.len());
-    self.original_tempo = orig_tempo;
+    self.reset();
   }
-  
-  fn compute_next_frame(&self) -> Stereo<f32> {
-    let len = self.frames.len();
-    return self.frames[self.elapsed_frames as usize % len];
-  }
-  // reloop rewind the conv
-  // abusing boxes
-  pub fn slice(&mut self) {
 
-    // let mut mutable_iter = self.signal_iter;
-    // *mutable_iter = self.frames.iter().cloned();
+  #[inline(always)]
+  fn compute_next_frame(&mut self) -> Stereo<f32> {
 
-    // let mut last_pos = 0;
+    let num_poss = self.positions.len() as u32;  
+    let num_frames = self.frames.len() as u32;
+    let scaled_num_frames = ((num_frames as f64) * (1.0 / self.playback_rate)) as u32;
+    let scaled_elapsed = ((self.elapsed_frames as f64) * (1.0 / self.playback_rate)) as u32 % scaled_num_frames;
 
-    // for pos in self.positions.iter() {
-    //   // jump
-    //   if *pos == 0 {
-    //     continue;
-    //   }
-    //   let new_pos = *pos as usize;
-    //   if self.elapsed_frames < *pos {
-    //     self.signal_it = Arc::new(signal.skip(last_pos).take(new_pos-last_pos));
-    //     return;
-    //   }
-    //   last_pos = new_pos;
+    self.elapsed_frames += 1;
+    // let num_frames = self.frames.len() as i32;
+    // let num_position = self.positions.len() as i32;
+    // let scaled_num_frames = ((num_frames as f64) * (1.0 / self.playback_rate)) as i32;
+    // let offset_per_slice = (scaled_num_frames-num_frames) / num_position;
+    
+    // let next_pos = self.positions.iter().find(|x| {
+    //   self.elapsed_frames < **x as i32
+    // });
+    // let next_pos = match next_pos {
+    //   Some(pos) => *pos as i32,
+    //   None => num_frames,
+    // };
+    // println!("{}", next_pos-self.elapsed_frames);
+    // self.elapsed_frames = (1 + self.elapsed_frames)%scaled_num_frames;
+
+    // // 
+    // // let curr_slided_pos = ((curr_pos as f64)*(1.0/self.playback_rate)) as i32;
+
+    // // println!("-> {} {}", curr_pos, curr_slided_pos);
+
+    // let next_pos = match next_pos {
+    //   Some(pos) => *pos as i32,
+    //   None => num_frames,
+    // };
+    // let next_x_pos = next_pos+offset_per_slice;
+    // if self.elapsed_frames >= next_pos-offset_per_slice {
+    //   self.elapsed_frames = (1 + self.elapsed_frames)%num_frames;
+    //   return Stereo::<f32>::equilibrium()
+    // } else {
+    //   let next_frame = self.frames[self.cursor as usize];
+    //   self.cursor = (1 + self.cursor)%num_frames;
+    //   self.elapsed_frames = (1 + self.elapsed_frames)%num_frames;
+    //   return next_frame
     // }
-    //   // compute the slided sample position according to current playback_rate
-    //   let last_slided_pos = ((last_pos as f64) * 1.0 / self.playback_rate) as usize;
-    //   let next_slided_pos = ((*pos as f64) * 1.0 / self.playback_rate) as usize;
+    // // if self.elapsed_frames < next_pos {
+
+    // // } else {
+    // //   self.elapsed_frames = (1 + self.elapsed_frames)%num_frames;
+    // //   return Stereo::<f32>::equilibrium()
+    // // }
+    return Stereo::<f32>::equilibrium()
   }
 
   // fetch commands from rx
@@ -103,21 +139,18 @@ impl SlicedAudioTrack {
       Ok(command) => match command {
         ::midi::CommandMessage::Playback(playback_message) => match playback_message.sync {
           ::midi::SyncMessage::Start() => {
-            self.elapsed_frames = 0;
+            self.reset();
             self.playing = true;
-            // self.slice();
           }
           ::midi::SyncMessage::Stop() => {
-            self.elapsed_frames = 0;
+            self.reset();
             self.playing = false;
-            // self.slice();
           }
           ::midi::SyncMessage::Tick(_tick) => {
             let rate = playback_message.time.tempo / self.original_tempo;
             // changed tempo
             if self.playback_rate != rate {
               self.playback_rate = rate;
-              // self.slice();
             }
           }
         },
@@ -144,7 +177,6 @@ impl Iterator for SlicedAudioTrack {
 
   // next!
   fn next(&mut self) -> Option<Self::Item> {
-    
     // non blocking midi command fetch
     self.fetch_commands();
 
@@ -155,9 +187,6 @@ impl Iterator for SlicedAudioTrack {
 
     // compute next frame
     let next_frame = self.compute_next_frame();
-
-    // inc
-    self.elapsed_frames += 1;
 
     // return to iter
     return Some(next_frame);
