@@ -23,13 +23,11 @@ pub struct SlicedAudioTrack {
   // volume of the track
   volume: f32,
   // elapsed frames
-  elapsed_frames: u32,
-  // current pos in slices
-  cursor: u32,
+  elapsed_frames: u64,
+  // current ticks
+  cursor: u64,
   // onset positions
   positions: Vec<u32>,
-  // last onset
-  last_onset: u32,
   // original samples, framed
   frames: Vec<Stereo<f32>>,
 }
@@ -45,7 +43,6 @@ impl SlicedAudioTrack {
       elapsed_frames: 0,
       cursor: 0,
       positions: Vec::new(),
-      last_onset: 0,
       frames: Vec::new(),
     }
   }
@@ -53,7 +50,6 @@ impl SlicedAudioTrack {
   fn reset (&mut self) {
     self.elapsed_frames = 0;
     self.cursor = 0;
-    self.last_onset = 0;
   }
 
   // load audio file
@@ -83,53 +79,8 @@ impl SlicedAudioTrack {
 
   #[inline(always)]
   fn compute_next_frame(&mut self) -> Stereo<f32> {
-
-    let num_poss = self.positions.len() as u32;  
-    let num_frames = self.frames.len() as u32;
-    let scaled_num_frames = ((num_frames as f64) * (1.0 / self.playback_rate)) as u32;
-    let scaled_elapsed = ((self.elapsed_frames as f64) * (1.0 / self.playback_rate)) as u32 % scaled_num_frames;
-
+    println!("t {}", self.cursor);
     self.elapsed_frames += 1;
-    // let num_frames = self.frames.len() as i32;
-    // let num_position = self.positions.len() as i32;
-    // let scaled_num_frames = ((num_frames as f64) * (1.0 / self.playback_rate)) as i32;
-    // let offset_per_slice = (scaled_num_frames-num_frames) / num_position;
-    
-    // let next_pos = self.positions.iter().find(|x| {
-    //   self.elapsed_frames < **x as i32
-    // });
-    // let next_pos = match next_pos {
-    //   Some(pos) => *pos as i32,
-    //   None => num_frames,
-    // };
-    // println!("{}", next_pos-self.elapsed_frames);
-    // self.elapsed_frames = (1 + self.elapsed_frames)%scaled_num_frames;
-
-    // // 
-    // // let curr_slided_pos = ((curr_pos as f64)*(1.0/self.playback_rate)) as i32;
-
-    // // println!("-> {} {}", curr_pos, curr_slided_pos);
-
-    // let next_pos = match next_pos {
-    //   Some(pos) => *pos as i32,
-    //   None => num_frames,
-    // };
-    // let next_x_pos = next_pos+offset_per_slice;
-    // if self.elapsed_frames >= next_pos-offset_per_slice {
-    //   self.elapsed_frames = (1 + self.elapsed_frames)%num_frames;
-    //   return Stereo::<f32>::equilibrium()
-    // } else {
-    //   let next_frame = self.frames[self.cursor as usize];
-    //   self.cursor = (1 + self.cursor)%num_frames;
-    //   self.elapsed_frames = (1 + self.elapsed_frames)%num_frames;
-    //   return next_frame
-    // }
-    // // if self.elapsed_frames < next_pos {
-
-    // // } else {
-    // //   self.elapsed_frames = (1 + self.elapsed_frames)%num_frames;
-    // //   return Stereo::<f32>::equilibrium()
-    // // }
     return Stereo::<f32>::equilibrium()
   }
 
@@ -146,7 +97,8 @@ impl SlicedAudioTrack {
             self.reset();
             self.playing = false;
           }
-          ::midi::SyncMessage::Tick(_tick) => {
+          ::midi::SyncMessage::Tick(tick) => {
+            self.cursor = tick;
             let rate = playback_message.time.tempo / self.original_tempo;
             // changed tempo
             if self.playback_rate != rate {
