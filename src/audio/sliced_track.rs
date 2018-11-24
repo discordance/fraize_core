@@ -134,14 +134,21 @@ impl SlicedAudioTrack {
       self.pslice = curr_slice as usize;
     }
 
-    let mut slice_len = 1+(self.positions[next_slice as usize] - self.positions[curr_slice as usize]);
+    // get this slice len in samples
+    let mut slice_len = self.positions[next_slice as usize] - self.positions[curr_slice as usize];
 
-    // if self.elapsed_frames % 1024 == 0{
-    //   println!("{}",slice_len);
-    // }
-    
-    // we have still samples to read
+    // init nextframe to silence
+    let mut next_frame = Stereo::<f32>::equilibrium();
+
+    // we have still samples to read in this slice ?
     if (slice_len as i64 - self.cursor) > 0 {
+      let mut findex = self.cursor as u32 + self.positions[curr_slice as usize];
+      findex = findex % num_frames as u32;
+      next_frame = self.frames[findex as usize]
+        .scale_amp(track_utils::fade_in(self.cursor, (256.0*self.playback_rate) as i64 ))
+        .scale_amp(track_utils::fade_out(self.cursor,  (3048.0*(1.0/self.playback_rate)) as i64 , slice_len as i64))
+        .scale_amp(2.0);
+      // println!("{}", track_utils::fade_out(self.cursor, 128, slice_len as u64));
       self.cursor += 1;
     }
 
@@ -151,10 +158,8 @@ impl SlicedAudioTrack {
     }
     // usefoul ?
     self.elapsed_frames += 1;
-    let mut findex = self.cursor as u32 + self.positions[curr_slice as usize];
-    findex = findex % num_frames as u32;
 
-    let next_frame = self.frames[findex as usize];
+    // return
     return next_frame;
   }
 
@@ -206,7 +211,7 @@ impl SlicedAudioTrack {
   }
 }
 
-// Implement `Iterator` for `AudioTrack`.
+// Implement `Iterator` for `SlicedAudioTrack`.
 impl Iterator for SlicedAudioTrack {
   type Item = Stereo<f32>;
 
