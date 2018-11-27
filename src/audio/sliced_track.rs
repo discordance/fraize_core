@@ -12,7 +12,10 @@ use self::time_calc::{Beats, Ppqn, Ticks};
 use audio::analytics;
 use audio::track_utils;
 
+// clock resolution
+
 const PPQN: Ppqn = 24;
+const QUANT: u32 = 8;
 
 // a slicer track
 pub struct SlicedAudioTrack {
@@ -82,13 +85,17 @@ impl SlicedAudioTrack {
     self.original_tempo = orig_tempo;
 
     // send for analytics :p
-    self.positions = analytics::detect_onsets(samples.clone());
+    let mut positions = analytics::detect_onsets(samples.clone());
 
     // convert to stereo frames
     self.frames = track_utils::to_stereo(samples);
 
-    // last postition
-    self.positions.push(self.frames.len() as u32);
+    // last postition to push
+    positions.push(self.frames.len() as u32);
+
+    // quantize the slices
+    let quantized = track_utils::quantize_pos(&positions, self.frames.len() as u32/(QUANT*beats as u32));
+    self.positions = quantized;
 
     // reset counters
     self.reset();
@@ -108,10 +115,7 @@ impl SlicedAudioTrack {
       PPQN,
       44_100.0,
     ) as i64;
-
-    // drift of ext clock vs sample reading in absolute
-    let drift = clock_frames - self.elapsed_frames as i64;
-
+    
     // cycles
     let cycle = (clock_frames as f32 / num_frames as f32) as i64;
 
@@ -150,10 +154,10 @@ impl SlicedAudioTrack {
       findex = findex % num_frames as u32;
 
       // get next frame, apply fade in/out env
-      next_frame = self.frames[findex as usize];
-        // .scale_amp(track_utils::fade_in(self.cursor, (256.0*self.playback_rate) as i64 ))
-        // .scale_amp(track_utils::fade_out(self.cursor,  (3048.0*(1.0/self.playback_rate)) as i64 , slice_len as i64))
-        // .scale_amp(2.0);
+      next_frame = self.frames[findex as usize]
+        .scale_amp(track_utils::fade_in(self.cursor, 128)) 
+        .scale_amp(track_utils::fade_out(self.cursor,  1024*4, slice_len as i64)) // @TODO must be relative with the speed
+        .scale_amp(2.0);
 
       // println!("{}", track_utils::fade_out(self.cursor, 128, slice_len as u64));
       self.cursor += 1;

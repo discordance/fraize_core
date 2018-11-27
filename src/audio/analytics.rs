@@ -52,9 +52,9 @@ pub fn detect_onsets(samples: Vec<f32>) -> Vec<u32> {
   let mut onset = Onset::new(WIND_SIZE, HOP_SIZE, SR).expect("Onset::new");
 
   // params
-  onset.set_threshold(1.1);
-  onset.set_silence(-90.0);
-  onset.set_minioi(0.02);
+  onset.set_threshold(1.3);
+  onset.set_silence(-50.0);
+  onset.set_minioi(0.01);
 
   // save position in seconds (we can get that in samples later)
   let mut positions: Vec<u32> = Vec::new();
