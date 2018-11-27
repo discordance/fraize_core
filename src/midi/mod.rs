@@ -138,6 +138,7 @@ pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<CommandMessage>
     println!("midi: Initial Tempo: {}", midi_time.tempo);
 
     // infinite loop in this thread, blocked by channel receiver
+    // @TODO refactor in own function 
     loop {
       // receive form channel
       let message = inner_rx.recv().unwrap();

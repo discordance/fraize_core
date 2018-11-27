@@ -90,7 +90,7 @@ impl SlicedAudioTrack {
     // last postition
     self.positions.push(self.frames.len() as u32);
 
-    //
+    // reset counters
     self.reset();
   }
 
@@ -104,7 +104,7 @@ impl SlicedAudioTrack {
 
     // how many frames elapsed from the clock point of view
     let clock_frames = Ticks(self.ticks as i64).samples(
-      1.0 / self.playback_rate * self.original_tempo,
+      self.original_tempo,
       PPQN,
       44_100.0,
     ) as i64;
@@ -135,19 +135,26 @@ impl SlicedAudioTrack {
     }
 
     // get this slice len in samples
-    let mut slice_len = self.positions[next_slice as usize] - self.positions[curr_slice as usize];
+    let slice_len = self.positions[next_slice as usize] - self.positions[curr_slice as usize];
 
     // init nextframe to silence
     let mut next_frame = Stereo::<f32>::equilibrium();
 
     // we have still samples to read in this slice ?
     if (slice_len as i64 - self.cursor) > 0 {
+
+      // get the right index in buffer
       let mut findex = self.cursor as u32 + self.positions[curr_slice as usize];
+
+      // dont overflow the buffer with wrapping
       findex = findex % num_frames as u32;
-      next_frame = self.frames[findex as usize]
-        .scale_amp(track_utils::fade_in(self.cursor, (256.0*self.playback_rate) as i64 ))
-        .scale_amp(track_utils::fade_out(self.cursor,  (3048.0*(1.0/self.playback_rate)) as i64 , slice_len as i64))
-        .scale_amp(2.0);
+
+      // get next frame, apply fade in/out env
+      next_frame = self.frames[findex as usize];
+        // .scale_amp(track_utils::fade_in(self.cursor, (256.0*self.playback_rate) as i64 ))
+        // .scale_amp(track_utils::fade_out(self.cursor,  (3048.0*(1.0/self.playback_rate)) as i64 , slice_len as i64))
+        // .scale_amp(2.0);
+
       // println!("{}", track_utils::fade_out(self.cursor, 128, slice_len as u64));
       self.cursor += 1;
     }
