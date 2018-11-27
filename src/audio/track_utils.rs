@@ -23,13 +23,13 @@ pub fn parse_filepath_beats(path: &str) -> i64 {
   return beats;
 }
 
-// calculate the beat
+// calculate the beat in the filepath
 pub fn parse_original_tempo(path: &str, num_samples: usize) -> (f64, i64) {
   // compute number of beats
-  let beats = parse_filepath_beats(path);
+  let num_beats = parse_filepath_beats(path);
   let ms = Samples((num_samples as i64) / 2).to_ms(44_100.0);
   let secs = ms.to_f64().unwrap() / 1000.0;
-  return (60.0 / (secs / beats as f64), beats);
+  return (60.0 / (secs / num_beats as f64), num_beats);
 }
 
 // transforms sample vector to frame vector
