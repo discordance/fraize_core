@@ -26,7 +26,7 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
 
   // test sliced
   let mut sliced_track = SlicedAudioTrack::new(midi_rx);
-  sliced_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
+  sliced_track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
 
   // init audio with CPAL !
   // creates event loop

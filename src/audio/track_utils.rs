@@ -67,6 +67,7 @@ pub fn fade_in(t: i64, len: i64) -> f32 {
 }
 
 // a clamped fade out
+// @TODO this env doest sound good for basses
 pub fn fade_out(t: i64, len: i64, end: i64) -> f32 {
     let c1 = f32::consts::E.powf((end as f32 - t as f32) / len as f32) -1.0;
     let c2 = f32::consts::E-1.0;

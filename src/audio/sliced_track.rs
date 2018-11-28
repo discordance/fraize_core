@@ -15,7 +15,7 @@ use audio::track_utils;
 // clock resolution
 
 const PPQN: Ppqn = 24;
-const QUANT: u32 = 8;
+const QUANT: u32 = 16;
 
 // a slicer track
 pub struct SlicedAudioTrack {
@@ -115,7 +115,7 @@ impl SlicedAudioTrack {
       PPQN,
       44_100.0,
     ) as i64;
-    
+
     // cycles
     let cycle = (clock_frames as f32 / num_frames as f32) as i64;
 
@@ -155,7 +155,7 @@ impl SlicedAudioTrack {
 
       // get next frame, apply fade in/out env
       next_frame = self.frames[findex as usize]
-        .scale_amp(track_utils::fade_in(self.cursor, 128)) 
+        .scale_amp(track_utils::fade_in(self.cursor, 64)) 
         .scale_amp(track_utils::fade_out(self.cursor,  1024*4, slice_len as i64)) // @TODO must be relative with the speed
         .scale_amp(2.0);
 
