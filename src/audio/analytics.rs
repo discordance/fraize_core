@@ -6,8 +6,8 @@ use self::aubio::tempo::Tempo;
 use self::aubio::onset::Onset;
 
 // consts
-const HOP_SIZE : usize = 256*2;
-const WIND_SIZE : usize = 1024*2;
+const HOP_SIZE : usize = 512;
+const WIND_SIZE : usize = 2048;
 const SR : usize = 44_100;
 
 // bpm detector via aubio

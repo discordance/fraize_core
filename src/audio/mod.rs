@@ -1,12 +1,13 @@
+#![allow(dead_code)]
+
 extern crate bus;
 extern crate cpal;
 extern crate sample;
 
-use std::sync::Arc;
-
-mod basic_track;
-mod analytics;
+mod repitch_track;
 mod sliced_track;
+
+mod analytics;
 mod track_utils;
 mod filters;
 
@@ -14,19 +15,19 @@ use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
 use self::sample::frame::{Frame, Stereo};
 use self::sample::ToFrameSliceMut;
-// use self::basic_track::BasicAudioTrack;
-use self::sliced_track::SlicedAudioTrack;
+use self::repitch_track::RepitchAudioTrack;
+// use self::sliced_track::SlicedAudioTrack;
 
 // initialize audio machinery
 pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
 
   // init our beautiful test audiotrack
-  // let mut basic_track = BasicAudioTrack::new(midi_rx);
-  // basic_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
+  let mut track = RepitchAudioTrack::new(midi_rx);
+  track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
   // test sliced
-  let mut sliced_track = SlicedAudioTrack::new(midi_rx);
-  sliced_track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
+  // let mut sliced_track = SlicedAudioTrack::new(midi_rx);
+  // sliced_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
   // init audio with CPAL !
   // creates event loop
@@ -75,7 +76,7 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
 
         // let re = &sliced_track;
         // sliced_track;
-        let next_block = sliced_track.next_block(size);
+        let next_block = track.next_block(size);
         // // create a mutable iterator
         let mut it = next_block.iter();
         // // inject the frames out

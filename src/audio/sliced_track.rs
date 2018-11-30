@@ -94,14 +94,17 @@ impl SlicedAudioTrack {
     positions.push(self.frames.len() as u32);
 
     // quantize the slices
-    let quantized = track_utils::quantize_pos(&positions, self.frames.len() as u32/(QUANT*beats as u32));
+    let quantized = track_utils::quantize_pos(
+      &positions,
+      self.frames.len() as u32 / (QUANT * beats as u32),
+    );
     self.positions = quantized;
 
     // reset counters
     self.reset();
   }
 
-  #[inline(always)]
+  // @TODO What the heck this is too much casting
   fn compute_next_frame(&mut self, tick_frame: bool) -> Stereo<f32> {
     // total number of frames in the buffer
     let num_frames = self.frames.len() as i64;
@@ -110,11 +113,7 @@ impl SlicedAudioTrack {
     let num_slices = self.positions.len() as i64;
 
     // how many frames elapsed from the clock point of view
-    let clock_frames = Ticks(self.ticks as i64).samples(
-      self.original_tempo,
-      PPQN,
-      44_100.0,
-    ) as i64;
+    let clock_frames = Ticks(self.ticks as i64).samples(self.original_tempo, PPQN, 44_100.0) as i64;
 
     // cycles
     let cycle = (clock_frames as f32 / num_frames as f32) as i64;
@@ -146,7 +145,6 @@ impl SlicedAudioTrack {
 
     // we have still samples to read in this slice ?
     if (slice_len as i64 - self.cursor) > 0 {
-
       // get the right index in buffer
       let mut findex = self.cursor as u32 + self.positions[curr_slice as usize];
 
@@ -155,8 +153,12 @@ impl SlicedAudioTrack {
 
       // get next frame, apply fade in/out env
       next_frame = self.frames[findex as usize]
-        .scale_amp(track_utils::fade_in(self.cursor, 64)) 
-        .scale_amp(track_utils::fade_out(self.cursor,  1024*4, slice_len as i64)) // @TODO must be relative with the speed
+        .scale_amp(track_utils::fade_in(self.cursor, 64))
+        .scale_amp(track_utils::fade_out(
+          self.cursor,
+          1024 * 4,
+          slice_len as i64,
+        )) // @TODO must be relative with the speed
         .scale_amp(2.0);
 
       // println!("{}", track_utils::fade_out(self.cursor, 128, slice_len as u64));
@@ -197,7 +199,6 @@ impl SlicedAudioTrack {
             if self.playback_rate != rate {
               self.playback_rate = rate;
             }
-
             // we received a tick, but we need to inc it later
             tick_received = true;
           }
