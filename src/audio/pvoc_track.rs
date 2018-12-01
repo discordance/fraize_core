@@ -33,19 +33,20 @@ pub struct PvocAudioTrack {
   // phase vocoder
   pvoc: PhaseVocoder,
   // buffers to avoid too much allocs for the pvoc input
-  voc_in_buff: [Vec<f32>; 2],
-  voc_out_buff: [Vec<f32>; 2],
+  voc_in_buff: [Vec<f32>; 1],
+  voc_out_buff: [Vec<f32>; 1],
 }
 
 impl PvocAudioTrack {
   // constructor
   pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> PvocAudioTrack {
-    // init pvoc
-    let pvoc = PhaseVocoder::new(2, 44100.0, 256, 4);
+    
+    // init pvoc in mono
+    let pvoc = PhaseVocoder::new(1, 44100.0, 256, 4);
 
     // init the pvoc buffers
-    let voc_in_buff = [vec![0f32; 1024], vec![0f32; 1024]];
-    let voc_out_buff = [vec![0f32; 1024], vec![0f32; 1024]];
+    let voc_in_buff = [vec![0f32; 1024]];
+    let voc_out_buff = [vec![0f32; 1024]];
 
     PvocAudioTrack {
       command_rx,
@@ -57,7 +58,7 @@ impl PvocAudioTrack {
       elapsed_frames: 0,
       pvoc,
       voc_in_buff,
-      voc_out_buff,
+      voc_out_buff
     }
   }
 
@@ -70,26 +71,20 @@ impl PvocAudioTrack {
       match next_frame {
         Some(frame) => {
           self.voc_in_buff[0][filled] = frame[0];
-          self.voc_in_buff[1][filled] = frame[1];
         }
         None => (),
       }
       filled += 1;
     }
 
-    let in_slices = self
-      .voc_in_buff
-      .iter()
-      .take(2)
-      .map(|x| &x[..size])
-      .collect::<Vec<_>>();
-
-    let mut out_slices = self
-      .voc_out_buff
-      .iter_mut()
-      .take(2)
-      .map(|x| &mut x[..size])
-      .collect::<Vec<_>>();
+    // OKAY ! How to take nested slices without horrendous Vec alloc
+    let in_slices = &[ 
+      &self.voc_in_buff[0][..size], 
+    ];
+    // OKAY ! How to take nested slices
+    let out_slices = &mut[ 
+      &mut self.voc_out_buff[0][..size],
+    ];
 
     self.pvoc.process(
       &in_slices[..],
@@ -108,9 +103,11 @@ impl PvocAudioTrack {
       },
     );
 
+    // write in out vec
+    // @TODO GET RID OF THIS ALLOC
     let out_vec = out_slices[0]
       .iter().take(size)
-      .zip(out_slices[1].iter().take(size))
+      .zip(out_slices[0].iter().take(size))
       .map(|(l, r)| [*l, *r])
       .collect::<Vec<_>>();
 
