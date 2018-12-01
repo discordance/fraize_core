@@ -14,6 +14,10 @@ sample = "0.10.0"
 num = "0.1.28"
 elapsed = "0.1"
 itertools = "0.7.9"
+pvoc = "0.1.4"
 
 [dependencies.aubio]
 path = "../aubio-rs"
+
+[profile.dev]
+opt-level = 2

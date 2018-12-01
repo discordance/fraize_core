@@ -33,6 +33,7 @@ pub fn parse_original_tempo(path: &str, num_samples: usize) -> (f64, i64) {
 }
 
 // transforms sample vector to frame vector
+// @PITFALL HEAP ALLOC
 pub fn to_stereo(samples: Vec<f32>) -> Vec<Stereo<f32>> {
   
   // consumable the iterator

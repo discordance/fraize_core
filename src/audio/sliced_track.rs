@@ -213,7 +213,8 @@ impl SlicedAudioTrack {
 
   // returns a buffer insead of frames one by one
   pub fn next_block(&mut self, size: usize) -> Vec<Stereo<f32>> {
-    // take the slice
+    // take the size
+    // @TODO REMOVE THE ALLOCATION HERE
     let audio_buffer = self.take(size).collect();
     /*
      * HERE WE CAN PROCESS BY CHUNK

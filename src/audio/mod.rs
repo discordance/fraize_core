@@ -6,6 +6,7 @@ extern crate sample;
 
 mod repitch_track;
 mod sliced_track;
+mod pvoc_track;
 
 mod analytics;
 mod track_utils;
@@ -17,12 +18,13 @@ use self::sample::frame::{Frame, Stereo};
 use self::sample::ToFrameSliceMut;
 use self::repitch_track::RepitchAudioTrack;
 // use self::sliced_track::SlicedAudioTrack;
+use self::pvoc_track::PvocAudioTrack;
 
 // initialize audio machinery
 pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
 
   // init our beautiful test audiotrack
-  let mut track = RepitchAudioTrack::new(midi_rx);
+  let mut track = PvocAudioTrack::new(midi_rx);
   track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
   // test sliced
