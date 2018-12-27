@@ -7,7 +7,7 @@ use self::bus::BusReader;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
-use self::time_calc::{Beats, Ppqn, Ticks};
+use self::time_calc::{Ppqn, Ticks};
 
 use audio::analytics;
 use audio::track_utils;

@@ -1,20 +1,18 @@
 extern crate bus;
 extern crate hound;
 extern crate num;
+extern crate pvoc;
 extern crate sample;
 extern crate time_calc;
-extern crate aubio;
 
 use self::bus::BusReader;
 use self::hound::WavReader;
+use self::pvoc::{Bin, PhaseVocoder};
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
-use self::aubio::pvoc::Pvoc;
 
 use audio::track_utils;
-
-const HOP_SIZE : usize = 512;
-const WIND_SIZE : usize = 2048;
+use std::slice;
 
 // an audio track
 pub struct PvocAudioTrack {
@@ -32,13 +30,23 @@ pub struct PvocAudioTrack {
   frames: Vec<Stereo<f32>>,
   // elapsed frames as requested by audio
   elapsed_frames: u64,
+  // phase vocoder
+  pvoc: PhaseVocoder,
+  // buffers to avoid too much allocs for the pvoc input
+  voc_in_buff: [Vec<f32>; 1],
+  voc_out_buff: [Vec<f32>; 1],
 }
 
 impl PvocAudioTrack {
   // constructor
   pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> PvocAudioTrack {
     
-    let mut aubio_pvoc = Pvoc::new(WIND_SIZE, HOP_SIZE).expect("Pvoc::new");
+    // init pvoc in mono
+    let pvoc = PhaseVocoder::new(1, 44100.0, 1024, 32);
+
+    // init the pvoc buffers
+    let voc_in_buff = [vec![0f32; 1024]];
+    let voc_out_buff = [vec![0f32; 1024]];
 
     PvocAudioTrack {
       command_rx,
@@ -48,21 +56,63 @@ impl PvocAudioTrack {
       volume: 0.5,
       frames: Vec::new(),
       elapsed_frames: 0,
+      pvoc,
+      voc_in_buff,
+      voc_out_buff
     }
   }
 
   // returns a buffer insead of frames one by one
   pub fn next_block(&mut self, size: usize) -> Vec<Stereo<f32>> {
-    // non blocking command fetch
-    self.fetch_commands();
-
-    // doesnt consume if not playing
-    if !self.playing {
-      return (0..size).map(|_x| Stereo::<f32>::equilibrium()).collect();
+    // fill in the pvoc input buffer
+    let mut filled = 0;
+    while filled < size {
+      let next_frame = self.next();
+      match next_frame {
+        Some(frame) => {
+          self.voc_in_buff[0][filled] = frame[0];
+        }
+        None => (),
+      }
+      filled += 1;
     }
 
+    // OKAY ! How to take nested slices without horrendous Vec alloc
+    let in_slices = &[ 
+      &self.voc_in_buff[0][..size], 
+    ];
+    // OKAY ! How to take nested slices
+    let out_slices = &mut[ 
+      &mut self.voc_out_buff[0][..size],
+    ];
+
+    self.pvoc.process(
+      &in_slices[..],
+      &mut out_slices[..],
+      |channels: usize, bins: usize, input: &[Vec<Bin>], output: &mut [Vec<Bin>]| {
+        for i in 0..channels {
+          for j in 0..bins {
+            // output[i][j] = input[i][j]; // change this!
+            let index = ((j as f64) * 0.5) as usize;
+            if index < bins / 2 {
+                output[i][index].freq = input[i][j].freq * 1.0;
+                output[i][index].amp += input[i][j].amp;
+            }
+          }
+        }
+      },
+    );
+
+    // write in out vec
+    // @TODO GET RID OF THIS ALLOC
+    let out_vec = out_slices[0]
+      .iter().take(size)
+      .zip(out_slices[0].iter().take(size))
+      .map(|(l, r)| [*l, *r])
+      .collect::<Vec<_>>();
+
     // send full buffer
-    return self.take(size).collect();
+    return out_vec;
   }
 
   // load audio file
@@ -71,7 +121,7 @@ impl PvocAudioTrack {
     let reader = WavReader::open(path).unwrap();
 
     // samples preparation
-    let samples: Vec<f32> = reader
+    let mut samples: Vec<f32> = reader
       .into_samples::<i16>()
       .filter_map(Result::ok)
       .map(i16::to_sample::<f32>)

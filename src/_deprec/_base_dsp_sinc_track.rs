@@ -1,23 +1,26 @@
+extern crate basic_dsp;
 extern crate bus;
+extern crate elapsed;
 extern crate hound;
 extern crate num;
 extern crate sample;
 extern crate time_calc;
-extern crate aubio;
 
 use self::bus::BusReader;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
-use self::aubio::pvoc::Pvoc;
 
+use self::basic_dsp::conv_types::SincFunction;
+use self::basic_dsp::{FromVector, InterpolationOps, SingleBuffer, ToComplexVector, Vector};
+
+use audio::filters::{BiquadFilter, FilterOp, FilterType};
 use audio::track_utils;
 
-const HOP_SIZE : usize = 512;
-const WIND_SIZE : usize = 2048;
+const INTERP_SIZE: usize = 16;
 
 // an audio track
-pub struct PvocAudioTrack {
+pub struct SincAudioTrack {
   // commands rx
   command_rx: BusReader<::midi::CommandMessage>,
   // original tempo of the loaded audio
@@ -28,30 +31,50 @@ pub struct PvocAudioTrack {
   playing: bool,
   // volume of the track
   volume: f32,
-  // original samples
+  // original samples in frame
   frames: Vec<Stereo<f32>>,
+  // interp buffer
+  interp_buffer: SingleBuffer<f32>,
+  // interp function
+  sinc_function: SincFunction<f32>,
+  // to ipol
+  prev_samples: [f32; INTERP_SIZE],
   // elapsed frames as requested by audio
   elapsed_frames: u64,
+  // filter bank
+  filter_bank: BiquadFilter,
 }
-
-impl PvocAudioTrack {
+impl SincAudioTrack {
   // constructor
-  pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> PvocAudioTrack {
-    
-    let mut aubio_pvoc = Pvoc::new(WIND_SIZE, HOP_SIZE).expect("Pvoc::new");
+  pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> SincAudioTrack {
+    // filter
+    let filter = BiquadFilter::create_filter(
+      FilterType::LowPass(),
+      FilterOp::UseQ(),
+      44_100.0, // rate
+      44_100.0/2.0, // cutoff
+      1.0,      // db gain
+      1.0,      // q
+      1.0,      // bw
+      1.0,      //slope
+    );
 
-    PvocAudioTrack {
+    SincAudioTrack {
       command_rx,
       original_tempo: 120.0,
       playback_rate: 1.0,
       playing: false,
       volume: 0.5,
       frames: Vec::new(),
+      interp_buffer: SingleBuffer::new(),
+      sinc_function: SincFunction::new(),
+      prev_samples: [0.0; INTERP_SIZE],
       elapsed_frames: 0,
+      filter_bank: filter,
     }
   }
 
-  // returns a buffer insead of frames one by one
+  // returns a buffer instead of frames one by one
   pub fn next_block(&mut self, size: usize) -> Vec<Stereo<f32>> {
     // non blocking command fetch
     self.fetch_commands();
@@ -61,8 +84,35 @@ impl PvocAudioTrack {
       return (0..size).map(|_x| Stereo::<f32>::equilibrium()).collect();
     }
 
+    // how much we need to prune
+    let to_take = ((size as f64) * self.playback_rate) as usize;
+
+    // to interleaved
+    let interleaved: Vec<f32> = self.take(to_take).flat_map(|x| x.to_vec()).collect();
+
+    // to complex
+    let mut complex = interleaved.to_complex_time_vec();
+
+    // replace with !
+    // https://github.com/lrbalt/libsoxr-rs
+    complex.interpolatef(
+      &mut self.interp_buffer,
+      &self.sinc_function,
+      (1.0 / self.playback_rate) as f32,
+      0.0,
+      INTERP_SIZE,
+    );
+
+    // re-frame the signal
+    let chunked = complex.to_slice().chunks(2);
+    let mut out = Vec::new();
+    for chunk in chunked {
+      let c = [chunk[0], chunk[1]];
+      out.push(c);
+    }
+
     // send full buffer
-    return self.take(size).collect();
+    return out;
   }
 
   // load audio file
@@ -83,6 +133,8 @@ impl PvocAudioTrack {
 
     // convert to stereo frames
     self.frames = track_utils::to_stereo(samples);
+
+    println!("{}", self.frames.len());
 
     // reset
     self.reset();
@@ -129,28 +181,14 @@ impl PvocAudioTrack {
 }
 
 // Implement `Iterator` for `AudioTrack`.
-impl Iterator for PvocAudioTrack {
+impl Iterator for SincAudioTrack {
   type Item = Stereo<f32>;
 
   // next!
   fn next(&mut self) -> Option<Self::Item> {
-    // non blocking command fetch
-    self.fetch_commands();
-
-    // doesnt consume if not playing
-    if !self.playing {
-      return Some(Stereo::<f32>::equilibrium());
-    }
-
-    // gte next frame
     let next_frame = self.next_frame();
 
     // return
     return Some(next_frame);
-    /*
-     * HERE WE CAN PROCESS BY FRAME
-     */
-    // FILTER BANK
-    // let frame = self.filter_bank.process(frame);
   }
 }

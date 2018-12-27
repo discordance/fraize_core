@@ -8,81 +8,77 @@ extern crate time_calc;
 use self::bus::BusReader;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
-use self::sample::{Frame, Sample};
+use self::sample::ring_buffer;
+use self::sample::{Frame, Sample}; // I24
 
 use audio::filters::{BiquadFilter, FilterOp, FilterType};
 use audio::track_utils;
+use std::f64;
 
-// // struct to help interpolation
-// struct CubInterp {
-//   iterp_val: f64,
-//   n_1: Stereo<f32>,
-//   n0: Stereo<f32>,
-//   n1: Stereo<f32>,
-//   n2: Stereo<f32>,
-// }
-// impl CubInterp {
-//   // advance
-//   fn next_source_frame(&mut self, f0: Stereo<f32>, f1: Stereo<f32>, f2: Stereo<f32>) {
-//     self.n_1 = self.n0;
-//     self.n0 = f0;
-//     self.n1 = f1;
-//     self.n2 = f2;
-//   }
-// /*
-//     xm1 = x [inpos - 1];
-//     x0  = x [inpos + 0];
-//     x1  = x [inpos + 1];
-//     x2  = x [inpos + 2];
-//     a = (3 * (x0-x1) - xm1 + x2) / 2;
-//     b = 2*x1 + xm1 - (5*x0 + x2) / 2;
-//     c = (x1 - xm1) / 2;
-//     y [outpos] = (((a * finpos) + b) * finpos + c) * finpos + x0;
-//  */
-//   fn interpolate(&mut self, x: f64) -> Stereo<f32> {
-//     let x2 = x * x;
-//     let mut out = self.n0.clone();
-//     let mut chan = 0;
-//     for c in out.iter_mut() {
-//       let s_1 = self.n_1[chan].to_sample::<f64>();
-//       let s0 = self.n0[chan].to_sample::<f64>();
-//       let s1 = self.n1[chan].to_sample::<f64>();
-//       let s2 = self.n2[chan].to_sample::<f64>();
-
-//       let a0 = s2 - s1 - s_1 + s0; //p
-//       let a1 = s_1 - s0 - a0;
-//       let a2 = s1 - s_1;
-//       let a3 = s0;
-
-//       *c = (a0 * x * x2 + a1 * x2 + a2 * x + a3).to_sample::<f32>();
-//       //
-//       chan += 1;
-//     }
-//     out
-//   }
-// }
+const R_BUFF_LEN: usize = 32;
+const UP_FACTOR: u64 = 1;
 
 // struct to help interpolation
-struct LinInterp {
+struct Interp {
   iterp_val: f64,
-  left: Stereo<f32>,
-  right: Stereo<f32>,
+  frames: ring_buffer::Fixed<[Stereo<f32>; R_BUFF_LEN]>,
+  idx: usize,
 }
-impl LinInterp {
-  // advance
+impl Interp {
+  // depth
+  fn depth(&self) -> usize {
+    self.frames.len() / 2
+  }
+
+  // Advance
   fn next_source_frame(&mut self, frame: Stereo<f32>) {
-    self.left = self.right;
-    self.right = frame;
+    let _old_frame = self.frames.push(frame);
+    if self.idx < self.depth() {
+      self.idx += 1;
+    }
   }
 
   // Converts linearly from the previous value, using the next value to interpolate.
   fn interpolate(&mut self, x: f64) -> Stereo<f32> {
-    self.left.zip_map(self.right, |l, r| {
-      let l_f = l.to_sample::<f64>();
-      let r_f = r.to_sample::<f64>();
-      let diff = r_f - l_f;
-      let out = ((diff * x) + l_f).to_sample::<f32>();
-      out
+    let phil = x;
+    let phir = 1.0 - x;
+    let nl = self.idx;
+    let nr = self.idx + 1;
+    let depth = self.depth();
+
+    let rightmost = nl + depth;
+    let leftmost = nr as isize - depth as isize;
+    let max_depth = if rightmost >= self.frames.len() {
+      self.frames.len() - depth
+    } else if leftmost < 0 {
+      (depth as isize + leftmost) as usize
+    } else {
+      depth
+    };
+
+    (0..max_depth).fold(Stereo::<f32>::equilibrium(), |mut v, n| {
+      v = {
+        let a = f64::consts::PI * (phil + n as f64);
+        let first = if a == 0.0 { 1.0 } else { f64::sin(a) / a };
+        let second = 0.5 + 0.5 * f64::cos(a / (phil + max_depth as f64));
+
+        //
+        v.zip_map(self.frames[nr - n], |vs, r_lag| {
+          vs.add_amp(
+            (first * second * r_lag.to_sample::<f64>())
+              .to_sample::<<Stereo<f32> as Frame>::Sample>(),
+          )
+        })
+      };
+
+      let a = f64::consts::PI * (phir + n as f64);
+      let first = if a == 0.0 { 1.0 } else { f64::sin(a) / a };
+      let second = 0.5 + 0.5 * f64::cos(a / (phir + max_depth as f64));
+      v.zip_map(self.frames[nl + n], |vs, r_lag| {
+        vs.add_amp(
+          (first * second * r_lag.to_sample::<f64>()).to_sample::<<Stereo<f32> as Frame>::Sample>(),
+        )
+      })
     })
   }
 }
@@ -102,13 +98,33 @@ pub struct RepitchAudioTrack {
   // original samples
   frames: Vec<Stereo<f32>>,
   // interpolation
-  interpolation: LinInterp,
+  interpolation: Interp,
   // elapsed frames as requested by audio
   elapsed_frames: u64,
+  // keep track of upsampled frames
+  upsampled_frames: u64,
+  // filters
+  // filter_up: BiquadFilter, 
 }
 impl RepitchAudioTrack {
   // constructor
   pub fn new(command_rx: BusReader<::midi::CommandMessage>) -> RepitchAudioTrack {
+    
+    // // filter 1
+    // let filter_up = BiquadFilter::create_filter(
+    //   FilterType::LowPass(),
+    //   FilterOp::UseSlope(),
+    //   44_100.0, // rate
+    //   44_100.0 / 2.0,              // cutoff
+    //   1.0,                         // db gain
+    //   1.0,                         // q
+    //   1.0,                         // bw
+    //   24.0,                         //slope
+    // );
+
+    // ring buffer for Sinc Interp
+    let ring_buffer = ring_buffer::Fixed::from([Stereo::<f32>::equilibrium(); R_BUFF_LEN]);
+
     RepitchAudioTrack {
       command_rx,
       original_tempo: 120.0,
@@ -116,12 +132,14 @@ impl RepitchAudioTrack {
       playing: false,
       volume: 0.5,
       frames: Vec::new(),
-      interpolation: LinInterp {
+      interpolation: Interp {
         iterp_val: 0.0,
-        left: Stereo::<f32>::equilibrium(),
-        right: Stereo::<f32>::equilibrium(),
+        idx: 0,
+        frames: ring_buffer,
       },
       elapsed_frames: 0,
+      upsampled_frames: 0,
+      // filter_up: filter_up
     }
   }
 
@@ -135,11 +153,23 @@ impl RepitchAudioTrack {
       return (0..size).map(|_x| Stereo::<f32>::equilibrium()).collect();
     }
 
+    // @TODO REMOVE ALLOCATION HERE
+    // take upsampled, filter
+    let it = self.take(size * UP_FACTOR as usize);
+    let mut ct = 0;
+    let mut audio_buffer = Vec::new();
+    for s in it {
+      // decimate
+      if ct % UP_FACTOR == 0 {
+        audio_buffer.push(s);
+      }
+      ct += 1;
+    }
     /*
      * HERE WE CAN PROCESS BY CHUNK
      */
     // send full buffer
-    return self.take(size).collect();
+    return audio_buffer;
   }
 
   // load audio file
@@ -148,10 +178,14 @@ impl RepitchAudioTrack {
     let reader = WavReader::open(path).unwrap();
 
     // samples preparation
-    let mut samples: Vec<f32> = reader
+    let samples: Vec<f32> = reader
       .into_samples::<i16>()
       .filter_map(Result::ok)
       .map(i16::to_sample::<f32>)
+      // .map(|s|{
+      //   let ss = I24::new(s).unwrap();
+      //   ss.to_sample::<f32>()
+      // })
       .collect();
 
     // parse and set original tempo
@@ -165,16 +199,22 @@ impl RepitchAudioTrack {
     self.reset();
   }
 
-  // upsampler next frame
+  // upsampling
   fn next_frame(&mut self) -> Stereo<f32> {
-    let next_frame = self.frames[self.elapsed_frames as usize % self.frames.len()];
-    self.elapsed_frames += 1;
+    // grab next frame in the frames buffer
+    let mut next_frame = Stereo::<f32>::equilibrium();
+    if self.upsampled_frames % UP_FACTOR == 0 {
+      next_frame = self.frames[self.elapsed_frames as usize % self.frames.len()];
+      self.elapsed_frames += 1;
+    }
+    self.upsampled_frames += 1;
     return next_frame;
   }
 
   // reset interp and counter
   fn reset(&mut self) {
     self.elapsed_frames = 0;
+    self.upsampled_frames = 0;
   }
 
   // fetch commands from rx, return true if received tick for latter sync
@@ -212,16 +252,17 @@ impl Iterator for RepitchAudioTrack {
   fn next(&mut self) -> Option<Self::Item> {
     // advance frames
     while self.interpolation.iterp_val >= 1.0 {
-      let f0 = self.next_frame();
-      self.interpolation.next_source_frame(f0);
+      let next_frame = self.next_frame();
+      self.interpolation.next_source_frame(next_frame);
       self.interpolation.iterp_val -= 1.0;
     }
 
-    // // apply interpolation
+    // apply interpolation
     let interp_val = self.interpolation.iterp_val;
-    let mut next_i_frame = self.interpolation.interpolate(interp_val);
+    let next_i_frame = self.interpolation.interpolate(interp_val);
     self.interpolation.iterp_val += self.playback_rate;
 
+    // return
     return Some(next_i_frame);
   }
 }
