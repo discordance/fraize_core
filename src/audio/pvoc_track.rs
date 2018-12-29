@@ -81,6 +81,7 @@ impl PvocAudioTrack {
 
   // returns a buffer insead of frames one by one
   pub fn next_block(&mut self, size: usize) -> Vec<Stereo<f32>> {
+
     // non blocking command fetch
     self.fetch_commands();
 
@@ -88,6 +89,8 @@ impl PvocAudioTrack {
     if !self.playing {
       return (0..size).map(|_x| Stereo::<f32>::equilibrium()).collect();
     }
+
+    println!("size {}", size);
 
     // get separate chanels
     let mut block_l = vec![0.0; size];
