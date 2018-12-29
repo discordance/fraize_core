@@ -13,14 +13,13 @@ hound = "3.4.0"
 sample = "0.10.0"
 num = "0.1.28"
 elapsed = "0.1"
-pvoc = "0.1.4"
-# basic_dsp = "*"
+# pvoc = "0.1.4"
 
 [dependencies.aubio]
 path = "../aubio-rs"
 
-[dependencies.basic_dsp]
-path = "../basic_dsp"
+# [dependencies.basic_dsp]
+# path = "../basic_dsp"
 
 [profile.dev]
 opt-level = 2
