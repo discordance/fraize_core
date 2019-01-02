@@ -23,6 +23,17 @@ fn unwrap2pi(phase: f32) -> f32 {
   return phase + TWO_PI * (1. + (-(phase + PI) / TWO_PI).floor());
 }
 
+fn round_up(num: i32, multiple: i32) -> i32 {
+  if multiple == 0 {
+    return num;
+  }
+  let remainder = num % multiple;
+  if remainder == 0 {
+    return num;
+  }
+  return num + multiple - remainder;
+}
+
 // an audio track
 pub struct PvocAudioTrack {
   // commands rx
@@ -41,14 +52,16 @@ pub struct PvocAudioTrack {
   elapsed_samples: u64,
   // aubio pvoc
   pvoc: Pvoc,
-  // buffer of timeshifted samples
-  pvoc_ring: Vec<f32>,
+  // circular buffer of timeshifted samples
+  pvoc_buffer: Vec<f32>,
   // previous pvoc norm frame
   pnorm: Vec<f32>,
   // previous pvoc phas frame
   pphas: Vec<f32>,
   // phase accumulator
   phas_acc: Vec<f32>,
+  // pvoc hops elapsed
+  elapsed_hops: usize,
   // interp_read, float relative to elapsed hops
   interp_read: f32,
   // interp_block, number of hops in the final speed
@@ -70,10 +83,11 @@ impl PvocAudioTrack {
       samples: Vec::new(),
       elapsed_samples: 0,
       pvoc: aubio_pvoc,
-      pvoc_ring: Vec::with_capacity(2048),
+      pvoc_buffer: Vec::with_capacity(2048),
       pnorm: vec![0.0; ANALYSE_SIZE],
       pphas: vec![0.0; ANALYSE_SIZE],
       phas_acc: vec![0.0; ANALYSE_SIZE],
+      elapsed_hops: 0,
       interp_read: 0.0,
       interp_block: 0,
     }
@@ -81,26 +95,12 @@ impl PvocAudioTrack {
 
   // returns a buffer insead of frames one by one
   pub fn next_block(&mut self, size: usize) -> Vec<Stereo<f32>> {
-
     // non blocking command fetch
     self.fetch_commands();
 
     // doesnt consume if not playing
     if !self.playing {
       return (0..size).map(|_x| Stereo::<f32>::equilibrium()).collect();
-    }
-
-    println!("size {}", size);
-
-    // get separate chanels
-    let mut block_l = vec![0.0; size];
-    let mut block_r = vec![0.0; size];
-    for (i, s) in self.take(size).enumerate() {
-      if i % 2 == 0 {
-        block_l[i] = s;
-      } else {
-        block_r[i] = s;
-      }
     }
 
     // ugliness
@@ -111,39 +111,44 @@ impl PvocAudioTrack {
     let mut nn = vec![0.0; ANALYSE_SIZE];
     let mut pp = vec![0.0; ANALYSE_SIZE];
 
-    // how many iterations to fill one buffer ?
-    let n_iter = size / HOP_SIZE;
+    // block size is bigger than hop
+    loop {
+      // if ring
+      // @TODO BREAK TOO EARLY >??
+      if self.pvoc_buffer.len() >= size {
+        break;
+      }
 
-    // first while in the aubio demo
-    for i in 0..n_iter {
-      // which hop block maths
-      let mut hops_elapsed = (HOP_SIZE * i) + (self.elapsed_samples as isize - size as isize) as usize;
-      hops_elapsed /= HOP_SIZE;
-
-      // index in block samples
-      let block_index = i * HOP_SIZE;
+      // request a block of samples
+      let mut hop_samples = Vec::with_capacity(HOP_SIZE);
+      for (i, s) in self.take(HOP_SIZE * 2).enumerate() {
+        if i % 2 == 0 {
+          hop_samples.push(s);
+        }
+      }
 
       // anyway compute the first hop, (mono for now)
       self.pvoc.from_signal(
-        &block_l[block_index..block_index + HOP_SIZE],
+        &hop_samples[..],
         &mut n,
         &mut p,
       );
 
       // return early if its first block
       // the phase voc needs a warmup, we keep it silent for the first hop block
-      if hops_elapsed == 0 {
+      if self.elapsed_hops == 0 {
         self.pnorm.copy_from_slice(&n[..]);
         self.pphas.copy_from_slice(&p[..]);
-        // push silence in the deque
-        for _s in 0..HOP_SIZE { 
-          self.pvoc_ring.push(0.0);
+        // push silence in the queue
+        for _s in 0..HOP_SIZE {
+          self.pvoc_buffer.push(0.0);
         }
+        self.elapsed_hops += 1;
         continue;
       }
 
       // init the phase accumulator
-      if hops_elapsed == 1 {
+      if self.elapsed_hops == 1 {
         self.phas_acc.copy_from_slice(&self.pphas[..]);
       }
 
@@ -167,7 +172,7 @@ impl PvocAudioTrack {
         self.pvoc.to_signal(&nn, &pp, &mut new_sig);
 
         // push back in buffer
-        self.pvoc_ring.extend(new_sig);
+        self.pvoc_buffer.extend(new_sig);
 
         // update the phase
         for (i, pacc) in self.phas_acc.iter_mut().enumerate() {
@@ -185,25 +190,28 @@ impl PvocAudioTrack {
         self.interp_read = self.interp_block as f32 * self.playback_rate as f32;
 
         // break
-        if self.interp_read >= hops_elapsed as f32 {
+        if self.interp_read >= self.elapsed_hops as f32 {
           break;
         }
       }
       // copy anyway
       self.pnorm.copy_from_slice(&n[..]);
       self.pphas.copy_from_slice(&p[..]);
+
+      // inc hops
+      self.elapsed_hops += 1;
     }
 
-    // create buffer
-    let drained = self.pvoc_ring.drain(0..size);
-    let mut buff = Vec::with_capacity(size*2);
-    
-    for ns in drained {
-      buff.push(ns);
-      buff.push(ns);
+    // send some samples
+    let drained: Vec<f32> = self.pvoc_buffer.drain(0..size).collect();
+    let mut buff: Vec<Stereo<f32>> = Vec::new();
+
+    for i in 0..size {
+      buff.push([drained[i], drained[i]]);
     }
-    // send full buffer <
-    return track_utils::to_stereo(buff);
+
+    // send full buffer
+    return buff;
   }
 
   // load audio file
@@ -240,6 +248,7 @@ impl PvocAudioTrack {
   // reset interp and counter
   fn reset(&mut self) {
     self.elapsed_samples = 0;
+    self.elapsed_hops = 0;
     self.interp_block = 0;
     self.interp_read = 0.0;
   }
@@ -277,23 +286,9 @@ impl Iterator for PvocAudioTrack {
 
   // next!
   fn next(&mut self) -> Option<Self::Item> {
-    // non blocking command fetch
-    self.fetch_commands();
-
-    // doesnt consume if not playing
-    if !self.playing {
-      return Some(0.0);
-    }
-
     // gte next frame
     let next_sample = self.next_sample();
-
     // return
     return Some(next_sample);
-    /*
-     * HERE WE CAN PROCESS BY FRAME
-     */
-    // FILTER BANK
-    // let frame = self.filter_bank.process(frame);
   }
 }
