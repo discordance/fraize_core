@@ -88,3 +88,15 @@ pub fn quantize_pos(d: &Vec<u32>, multiple: u32) -> Vec<u32> {
   }
   new_pos
 }
+
+// basic onset slicer
+pub fn slice_onsets(len: usize, divisor: usize) -> Vec<u32> {
+  let step = len/divisor;
+  let mut ct = 0;
+  let mut positions = Vec::new();
+  for x in 0..divisor {
+    positions.push((x*step) as u32);
+  }
+  positions.push(len as u32);
+  return positions
+}

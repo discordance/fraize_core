@@ -13,8 +13,8 @@ use self::sample::{Frame, Sample};
 
 use audio::track_utils;
 
-const HOP_SIZE: usize = 64;
-const WIND_SIZE: usize = 512;
+const HOP_SIZE: usize = 32;
+const WIND_SIZE: usize = 1024;
 const ANALYSE_SIZE: usize = (WIND_SIZE / 2 + 1);
 const PI: f32 = std::f32::consts::PI;
 const TWO_PI: f32 = std::f32::consts::PI * 2.0;

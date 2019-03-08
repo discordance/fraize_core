@@ -13,55 +13,6 @@ use self::sample::{Frame, Sample};
 use audio::filters::{BiquadFilter, FilterOp, FilterType};
 use audio::track_utils;
 
-// // struct to help interpolation
-// struct CubInterp {
-//   iterp_val: f64,
-//   n_1: Stereo<f32>,
-//   n0: Stereo<f32>,
-//   n1: Stereo<f32>,
-//   n2: Stereo<f32>,
-// }
-// impl CubInterp {
-//   // advance
-//   fn next_source_frame(&mut self, f0: Stereo<f32>, f1: Stereo<f32>, f2: Stereo<f32>) {
-//     self.n_1 = self.n0;
-//     self.n0 = f0;
-//     self.n1 = f1;
-//     self.n2 = f2;
-//   }
-// /*
-//     xm1 = x [inpos - 1];
-//     x0  = x [inpos + 0];
-//     x1  = x [inpos + 1];
-//     x2  = x [inpos + 2];
-//     a = (3 * (x0-x1) - xm1 + x2) / 2;
-//     b = 2*x1 + xm1 - (5*x0 + x2) / 2;
-//     c = (x1 - xm1) / 2;
-//     y [outpos] = (((a * finpos) + b) * finpos + c) * finpos + x0;
-//  */
-//   fn interpolate(&mut self, x: f64) -> Stereo<f32> {
-//     let x2 = x * x;
-//     let mut out = self.n0.clone();
-//     let mut chan = 0;
-//     for c in out.iter_mut() {
-//       let s_1 = self.n_1[chan].to_sample::<f64>();
-//       let s0 = self.n0[chan].to_sample::<f64>();
-//       let s1 = self.n1[chan].to_sample::<f64>();
-//       let s2 = self.n2[chan].to_sample::<f64>();
-
-//       let a0 = s2 - s1 - s_1 + s0; //p
-//       let a1 = s_1 - s0 - a0;
-//       let a2 = s1 - s_1;
-//       let a3 = s0;
-
-//       *c = (a0 * x * x2 + a1 * x2 + a2 * x + a3).to_sample::<f32>();
-//       //
-//       chan += 1;
-//     }
-//     out
-//   }
-// }
-
 // struct to help interpolation
 struct LinInterp {
   iterp_val: f64,

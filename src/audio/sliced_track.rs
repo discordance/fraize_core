@@ -84,21 +84,25 @@ impl SlicedAudioTrack {
     let (orig_tempo, beats) = track_utils::parse_original_tempo(path, samples.len());
     self.original_tempo = orig_tempo;
 
-    // send for analytics :p
+    // send for analytics and get onset detection
     let mut positions = analytics::detect_onsets(samples.clone());
 
     // convert to stereo frames
     self.frames = track_utils::to_stereo(samples);
 
-    // last postition to push
-    positions.push(self.frames.len() as u32);
-
     // quantize the slices
-    let quantized = track_utils::quantize_pos(
-      &positions,
-      self.frames.len() as u32 / (QUANT * beats as u32),
-    );
-    self.positions = quantized;
+    // let quantized = track_utils::quantize_pos(
+    //   &positions,
+    //   self.frames.len() as u32 / (QUANT * beats as u32),
+    // );
+
+    // sometimes its much easier to just slice without onset detection
+    let sliced_pos = track_utils::slice_onsets(self.frames.len(), 32);
+  
+    // println!("{:?}", quantized);
+    // println!("{:?}", sliced_pos);
+
+    self.positions = sliced_pos;
 
     // reset counters
     self.reset();
@@ -156,9 +160,9 @@ impl SlicedAudioTrack {
         .scale_amp(track_utils::fade_in(self.cursor, 64))
         .scale_amp(track_utils::fade_out(
           self.cursor,
-          1024 * 4,
+          1024 * 2,
           slice_len as i64,
-        )) // @TODO must be relative with the speed
+        ))
         .scale_amp(2.0);
 
       // println!("{}", track_utils::fade_out(self.cursor, 128, slice_len as u64));

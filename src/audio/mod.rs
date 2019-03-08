@@ -16,20 +16,25 @@ use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
 use self::sample::frame::{Frame, Stereo};
 use self::sample::ToFrameSliceMut;
-// use self::repitch_track::RepitchAudioTrack;
-// use self::sliced_track::SlicedAudioTrack;
+use self::repitch_track::RepitchAudioTrack;
+use self::sliced_track::SlicedAudioTrack;
 use self::pvoc_track::PvocAudioTrack;
 
 // initialize audio machinery
 pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
 
   // init our beautiful test audiotrack
-  let mut track = PvocAudioTrack::new(midi_rx);
-  track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
+  // let mut track = PvocAudioTrack::new(midi_rx);
+  // track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
 
   // test sliced
-  // let mut sliced_track = SlicedAudioTrack::new(midi_rx);
-  // sliced_track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
+  let mut track = SlicedAudioTrack::new(midi_rx);
+  // track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
+  track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
+
+  // let mut track = RepitchAudioTrack::new(midi_rx);
+  // track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
+  // track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
   // init audio with CPAL !
   // creates event loop
