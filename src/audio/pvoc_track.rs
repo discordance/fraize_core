@@ -200,11 +200,6 @@ impl PvocAudioTrack {
         // interpolation counters
         self.interp_block += 1;
         self.interp_read = self.interp_block as f32 * self.playback_rate as f32;
-
-        // // break
-        // if self.interp_read >= self.elapsed_hops as f32 {
-        //   break;
-        // }
       }
       
       // copy anyway
@@ -220,7 +215,7 @@ impl PvocAudioTrack {
     let mut buff: Vec<Stereo<f32>> = Vec::new();
 
     for i in 0..size {
-      buff.push([drained[i]*0.70, drained[i]*0.70]);
+      buff.push([drained[i]*0.05, drained[i]*0.05]);
     }
 
     // send full buffer
