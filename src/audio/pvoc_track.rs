@@ -169,8 +169,6 @@ impl PvocAudioTrack {
         // used for timestretch
         let frac = 1.0 - (self.interp_read % 1.0);
 
-        // println!("frac {} hops {}", frac, self.elapsed_hops);
-
         // calc interp
         for (i, cnorm) in n.iter().enumerate() {
           nn[i] = frac * self.pnorm[i] + (1.0 - frac) * cnorm;
@@ -203,10 +201,10 @@ impl PvocAudioTrack {
         self.interp_block += 1;
         self.interp_read = self.interp_block as f32 * self.playback_rate as f32;
 
-        // break
-        if self.interp_read >= self.elapsed_hops as f32 {
-          break;
-        }
+        // // break
+        // if self.interp_read >= self.elapsed_hops as f32 {
+        //   break;
+        // }
       }
       
       // copy anyway
