@@ -52,8 +52,8 @@ pub struct PvocAudioTrack {
   elapsed_samples: u64,
   // aubio pvoc
   pvoc: Pvoc,
-  // circular buffer of timeshifted samples
-  pvoc_buffer: Vec<f32>,
+  // buffer of timeshifted samples
+  buff_pvoc_out: Vec<f32>,
   // previous pvoc norm frame
   pnorm: Vec<f32>,
   // previous pvoc phas frame
@@ -83,7 +83,7 @@ impl PvocAudioTrack {
       samples: Vec::new(),
       elapsed_samples: 0,
       pvoc: aubio_pvoc,
-      pvoc_buffer: Vec::with_capacity(2048),
+      buff_pvoc_out: Vec::with_capacity(2048),
       pnorm: vec![0.0; ANALYSE_SIZE],
       pphas: vec![0.0; ANALYSE_SIZE],
       phas_acc: vec![0.0; ANALYSE_SIZE],
@@ -111,33 +111,34 @@ impl PvocAudioTrack {
     let mut nn = vec![0.0; ANALYSE_SIZE];
     let mut pp = vec![0.0; ANALYSE_SIZE];
 
+    // hop sample buffer
+    let mut hop_samples = Vec::with_capacity(HOP_SIZE);
+
     // block size is bigger than hop
     loop {
 
-      // if ring
-      // @TODO BREAK TOO EARLY >??
-      let blen = self.pvoc_buffer.len();
+      let blen = self.buff_pvoc_out.len();
       if blen >= size {
-        // drain extra samples
-        // self.pvoc_buffer.drain(0..blen-size);
-        // println!("pvoc buffer: {} size: {}", blen, size);
         break;
       }
 
       // request a block of samples
-      let mut hop_samples = Vec::with_capacity(HOP_SIZE);
       for (i, s) in self.take(HOP_SIZE * 2).enumerate() {
         if i % 2 == 0 {
           hop_samples.push(s);
         }
       }
+      // drain
+      // 
 
       // anyway compute the first hop, (mono for now)
       self.pvoc.from_signal(
-        &hop_samples[..],
+        &hop_samples[..HOP_SIZE],
         &mut n,
         &mut p,
       );
+      hop_samples.drain(0..HOP_SIZE);
+      // println!("{}",hop_samples.len());
 
       // return early if its first block
       // the phase voc needs a warmup, we keep it silent for the first hop block
@@ -146,7 +147,7 @@ impl PvocAudioTrack {
         self.pphas.copy_from_slice(&p[..]);
         // push silence in the queue
         for _s in 0..HOP_SIZE {
-          self.pvoc_buffer.push(0.0);
+          self.buff_pvoc_out.push(0.0);
         }
         self.elapsed_hops += 1;
         continue;
@@ -158,15 +159,17 @@ impl PvocAudioTrack {
       }
 
       // interpolation loop
-      // let mut it = 0;
       loop {
 
-        // it += 1;
+        // break forgot this
+        if self.interp_read >= self.elapsed_hops as f32 {
+          break;
+        }
 
         // used for timestretch
         let frac = 1.0 - (self.interp_read % 1.0);
 
-        println!("frac {}", frac);
+        // println!("frac {} hops {}", frac, self.elapsed_hops);
 
         // calc interp
         for (i, cnorm) in n.iter().enumerate() {
@@ -183,7 +186,7 @@ impl PvocAudioTrack {
         self.pvoc.to_signal(&nn, &pp, &mut new_sig);
 
         // push back in buffer
-        self.pvoc_buffer.extend(new_sig);
+        self.buff_pvoc_out.extend(new_sig);
 
         // update the phase
         for (i, pacc) in self.phas_acc.iter_mut().enumerate() {
@@ -200,8 +203,6 @@ impl PvocAudioTrack {
         self.interp_block += 1;
         self.interp_read = self.interp_block as f32 * self.playback_rate as f32;
 
-        // println!("interp_read {} elapsed_hops {} interp_block {} plrate {}", self.interp_read, self.elapsed_hops, self.interp_block, self.playback_rate);
-        
         // break
         if self.interp_read >= self.elapsed_hops as f32 {
           break;
@@ -217,7 +218,7 @@ impl PvocAudioTrack {
     }
 
     // send some samples
-    let drained: Vec<f32> = self.pvoc_buffer.drain(0..size).collect();
+    let drained: Vec<f32> = self.buff_pvoc_out.drain(0..size).collect();
     let mut buff: Vec<Stereo<f32>> = Vec::new();
 
     for i in 0..size {
@@ -286,8 +287,10 @@ impl PvocAudioTrack {
             if self.playback_rate != rate {
               self.playback_rate = rate;
               // flush buffer
-              let len = self.pvoc_buffer.len();
-              self.pvoc_buffer.drain(0..len);
+              // generate click
+              let len = self.buff_pvoc_out.len();
+              self.buff_pvoc_out.drain(0..len);
+              // @TODO not correctly in sync
               self.interp_read = 0.0;
               self.interp_block = 0;
               self.elapsed_hops = 1;
