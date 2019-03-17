@@ -14,7 +14,7 @@ use self::sample::{Frame, Sample};
 use audio::track_utils;
 
 const HOP_SIZE: usize = 32;
-const WIND_SIZE: usize = 1024;
+const WIND_SIZE: usize = 512;
 const ANALYSE_SIZE: usize = (WIND_SIZE / 2 + 1);
 const PI: f32 = std::f32::consts::PI;
 const TWO_PI: f32 = std::f32::consts::PI * 2.0;
@@ -113,9 +113,14 @@ impl PvocAudioTrack {
 
     // block size is bigger than hop
     loop {
+
       // if ring
       // @TODO BREAK TOO EARLY >??
-      if self.pvoc_buffer.len() >= size {
+      let blen = self.pvoc_buffer.len();
+      if blen >= size {
+        // drain extra samples
+        // self.pvoc_buffer.drain(0..blen-size);
+        // println!("pvoc buffer: {} size: {}", blen, size);
         break;
       }
 
@@ -153,7 +158,11 @@ impl PvocAudioTrack {
       }
 
       // interpolation loop
+      // let mut it = 0;
       loop {
+
+        // it += 1;
+
         // used for timestretch
         let frac = 1.0 - (self.interp_read % 1.0);
 
@@ -168,7 +177,7 @@ impl PvocAudioTrack {
         // produce signal
         let mut new_sig = vec![0.0; HOP_SIZE];
 
-        // anyway compute the hop, (mono for now)
+        // the new hop
         self.pvoc.to_signal(&nn, &pp, &mut new_sig);
 
         // push back in buffer
@@ -189,11 +198,14 @@ impl PvocAudioTrack {
         self.interp_block += 1;
         self.interp_read = self.interp_block as f32 * self.playback_rate as f32;
 
+        println!("interp_read {} elapsed_hops {} interp_block {} plrate {}", self.interp_read, self.elapsed_hops, self.interp_block, self.playback_rate);
+        
         // break
         if self.interp_read >= self.elapsed_hops as f32 {
           break;
         }
       }
+      
       // copy anyway
       self.pnorm.copy_from_slice(&n[..]);
       self.pphas.copy_from_slice(&p[..]);
@@ -207,7 +219,7 @@ impl PvocAudioTrack {
     let mut buff: Vec<Stereo<f32>> = Vec::new();
 
     for i in 0..size {
-      buff.push([drained[i], drained[i]]);
+      buff.push([drained[i]*0.70, drained[i]*0.70]);
     }
 
     // send full buffer
@@ -271,6 +283,9 @@ impl PvocAudioTrack {
             // changed tempo
             if self.playback_rate != rate {
               self.playback_rate = rate;
+              // flush buffer
+              let len = self.pvoc_buffer.len();
+              self.pvoc_buffer.drain(0..len);
             }
           }
         },
