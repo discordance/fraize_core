@@ -9,9 +9,13 @@ use self::bus::BusReader;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
+use self::time_calc::{Ppqn, Ticks};
+
 
 use audio::filters::{BiquadFilter, FilterOp, FilterType};
 use audio::track_utils;
+
+const PPQN: Ppqn = 24;
 
 // struct to help interpolation
 struct LinInterp {
@@ -56,6 +60,8 @@ pub struct RepitchAudioTrack {
   interpolation: LinInterp,
   // elapsed frames as requested by audio
   elapsed_frames: u64,
+  // ticks
+  ticks: u64,
 }
 impl RepitchAudioTrack {
   // constructor
@@ -73,6 +79,7 @@ impl RepitchAudioTrack {
         right: Stereo::<f32>::equilibrium(),
       },
       elapsed_frames: 0,
+      ticks: 0,
     }
   }
 
@@ -126,6 +133,7 @@ impl RepitchAudioTrack {
   // reset interp and counter
   fn reset(&mut self) {
     self.elapsed_frames = 0;
+    self.ticks = 0;
   }
 
   // fetch commands from rx, return true if received tick for latter sync
@@ -142,10 +150,19 @@ impl RepitchAudioTrack {
             self.reset();
           }
           ::midi::SyncMessage::Tick(_tick) => {
+
+            // sync correction
+            // @TODO wait zero crossing + fadeIn ?
+            let clock_frames = Ticks(self.ticks as i64).samples(self.original_tempo, PPQN, 44_100.0) as i64;
+            self.ticks += 1;
+
             let rate = playback_message.time.tempo / self.original_tempo;
             // changed tempo
             if self.playback_rate != rate {
               self.playback_rate = rate;
+              // sync correction
+              // @TODO wait zero crossing + fadeIn ?
+              self.elapsed_frames = clock_frames as u64;
             }
           }
         },

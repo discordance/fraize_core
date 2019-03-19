@@ -25,16 +25,13 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
 
   // init our beautiful test audiotrack
   let mut track = PvocAudioTrack::new(midi_rx);
-  // track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
-  track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
   // test sliced
   // let mut track = SlicedAudioTrack::new(midi_rx);
-  // track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
-  // track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
 
   // let mut track = RepitchAudioTrack::new(midi_rx);
   // track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
   // track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
+  track.load_file("/Users/nunja/Documents/Audiolib/smplr/tick_4.wav");
 
   // init audio with CPAL !
   // creates event loop

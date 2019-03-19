@@ -10,6 +10,7 @@ use self::bus::BusReader;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
+use self::time_calc::{Ppqn, Ticks};
 
 use audio::track_utils;
 
@@ -18,6 +19,7 @@ const WIND_SIZE: usize = 512;
 const ANALYSE_SIZE: usize = (WIND_SIZE / 2 + 1);
 const PI: f32 = std::f32::consts::PI;
 const TWO_PI: f32 = std::f32::consts::PI * 2.0;
+const PPQN: Ppqn = 24;
 
 fn unwrap2pi(phase: f32) -> f32 {
   return phase + TWO_PI * (1. + (-(phase + PI) / TWO_PI).floor());
@@ -50,6 +52,8 @@ pub struct PvocAudioTrack {
   samples: Vec<f32>,
   // elapsed frames as requested by audio
   elapsed_samples: u64,
+  // clock_samples as calculated 
+  ticks: u64,
   // aubio pvoc
   pvoc: Pvoc,
   // buffer of timeshifted samples
@@ -82,6 +86,7 @@ impl PvocAudioTrack {
       volume: 0.5,
       samples: Vec::new(),
       elapsed_samples: 0,
+      ticks: 0,
       pvoc: aubio_pvoc,
       buff_pvoc_out: Vec::with_capacity(2048),
       pnorm: vec![0.0; ANALYSE_SIZE],
@@ -259,6 +264,7 @@ impl PvocAudioTrack {
     self.elapsed_hops = 0;
     self.interp_block = 0;
     self.interp_read = 0.0;
+    self.ticks = 0;
   }
 
   // fetch commands from rx, return true if received tick for latter sync
@@ -275,6 +281,12 @@ impl PvocAudioTrack {
             self.reset();
           }
           ::midi::SyncMessage::Tick(_tick) => {
+
+            // sync correction
+            let clock_frames = Ticks(self.ticks as i64).samples(self.original_tempo, PPQN, 44_100.0) as i64;
+            println!("delta {}", clock_frames - (self.elapsed_samples as i64/2));
+            self.ticks += 1;
+
             let rate = playback_message.time.tempo / self.original_tempo;
             // changed tempo
             if self.playback_rate != rate {
@@ -287,6 +299,8 @@ impl PvocAudioTrack {
               self.interp_read = 0.0;
               self.interp_block = 0;
               self.elapsed_hops = 1;
+              // @TODO wait zero crossing + fadeIn ?
+              self.elapsed_samples = clock_frames as u64 * 2;
             }
           }
         },
