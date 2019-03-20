@@ -43,10 +43,10 @@ pub struct RePitchGen {
   interpolation: LinInterp,
 }
 
-/// SampleGenerator implementation for RePitchGen
-impl SampleGenerator for RePitchGen {
+/// Specific sub SampleGen implementation
+impl RePitchGen {
   /// Inits and return a new RePitchGen sample generator
-  fn new() -> Self {
+  pub fn new() -> Self {
     RePitchGen {
       sample_gen: SampleGen {
         playback_rate: 1.0,
@@ -62,6 +62,10 @@ impl SampleGenerator for RePitchGen {
       },
     }
   }
+}
+
+/// SampleGenerator implementation for RePitchGen
+impl SampleGenerator for RePitchGen {
 
   /// Loads a SmartBuffer, moving
   fn load_buffer(&mut self, smartbuf: SmartBuffer) {

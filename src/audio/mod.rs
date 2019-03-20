@@ -4,6 +4,7 @@ extern crate bus;
 extern crate cpal;
 extern crate sample;
 
+mod mixer;
 mod repitch_track;
 mod sliced_track;
 mod pvoc_track;
@@ -34,6 +35,9 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
   // track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
   // track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
   track.load_file("/Users/nunja/Documents/Audiolib/smplr/tick_4.wav");
+
+  // test some mixer 
+  let mixer = mixer::AudioMixer::new_test();
 
   // init audio with CPAL !
   // creates event loop
@@ -73,6 +77,9 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
       StreamData::Output {
         buffer: UnknownTypeOutputBuffer::F32(mut buffer),
       } => {
+        
+        // mixer
+        mixer.get_tracks_number();
         
         // here we implement the trait sample::ToFrameSliceMut;
         // we can take a mutable buffer from the audio callback, but framed in stereo !!
