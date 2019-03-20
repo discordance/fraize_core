@@ -85,11 +85,13 @@ impl RepitchAudioTrack {
 
   // returns a buffer insead of frames one by one
   pub fn next_block(&mut self, size: usize) -> Vec<Stereo<f32>> {
+    
     // non blocking command fetch
     self.fetch_commands();
 
     // doesnt consume if not playing
     if !self.playing {
+      // @TODO ALLOC_IN_HOT remove this alloc
       return (0..size).map(|_x| Stereo::<f32>::equilibrium()).collect();
     }
 
@@ -97,6 +99,7 @@ impl RepitchAudioTrack {
      * HERE WE CAN PROCESS BY CHUNK
      */
     // send full buffer
+    // @TODO ALLOC_IN_HOT remove this alloc
     return self.take(size).collect();
   }
 
@@ -106,7 +109,7 @@ impl RepitchAudioTrack {
     let reader = WavReader::open(path).unwrap();
 
     // samples preparation
-    let mut samples: Vec<f32> = reader
+    let samples: Vec<f32> = reader
       .into_samples::<i16>()
       .filter_map(Result::ok)
       .map(i16::to_sample::<f32>)
@@ -187,7 +190,7 @@ impl Iterator for RepitchAudioTrack {
 
     // // apply interpolation
     let interp_val = self.interpolation.iterp_val;
-    let mut next_i_frame = self.interpolation.interpolate(interp_val);
+    let next_i_frame = self.interpolation.interpolate(interp_val);
     self.interpolation.iterp_val += self.playback_rate;
 
     return Some(next_i_frame);

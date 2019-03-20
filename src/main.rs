@@ -1,8 +1,6 @@
-// local mid lib
 mod midi;
-
-// local audio lib
 mod audio;
+mod sample_gen;
 
 fn main() {
     // ->

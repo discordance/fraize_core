@@ -12,6 +12,8 @@ mod analytics;
 mod track_utils;
 mod filters;
 
+use sample_gen::repitch;
+
 use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
 use self::sample::frame::{Frame, Stereo};

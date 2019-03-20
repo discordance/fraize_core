@@ -36,6 +36,13 @@ fn round_up(num: i32, multiple: i32) -> i32 {
   return num + multiple - remainder;
 }
 
+// // struct to help interpolation
+// struct LinInterp {
+//   iterp_val: f64,
+//   left: Stereo<f32>,
+//   right: Stereo<f32>,
+// }
+
 // an audio track
 pub struct PvocAudioTrack {
   // commands rx
@@ -109,10 +116,12 @@ impl PvocAudioTrack {
     }
 
     // ugliness
+    // @TODO REMOVE THIS ALLOC
     let mut n = vec![0.0; ANALYSE_SIZE];
     let mut p = vec![0.0; ANALYSE_SIZE];
 
     // ugliness * 2
+    // @TODO REMOVE THIS ALLOC
     let mut nn = vec![0.0; ANALYSE_SIZE];
     let mut pp = vec![0.0; ANALYSE_SIZE];
 
