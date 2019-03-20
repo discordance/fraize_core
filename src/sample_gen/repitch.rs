@@ -116,8 +116,10 @@ impl SampleGenerator for RePitchGen {
     self.sample_gen.frame_index = 0;
   }
 
-  /// yields processed block out of the samplegen
+  /// Yields processed block out of the samplegen.
+  /// This lazy method trigger all the processing.
   fn next_block(&mut self, block_out: &mut [Stereo<f32>]) {
+    // println!("block call {}", self.sample_gen.playing);
     // just write zero stero frames
     if !self.sample_gen.playing {
       for frame_out in block_out.iter_mut() {

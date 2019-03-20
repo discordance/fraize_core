@@ -83,6 +83,9 @@ impl SmartBuffer {
       })
       .collect();
 
+    // set frames
+    self.frames = frames;  
+
     // parse tempo from filename
     let (orig_tempo, _beats) = analytics::get_original_tempo(path, samples.len());
     self.original_tempo = orig_tempo;

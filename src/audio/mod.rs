@@ -26,18 +26,8 @@ use self::pvoc_track::PvocAudioTrack;
 // initialize audio machinery
 pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
 
-  // init our beautiful test audiotrack
-  let mut track = PvocAudioTrack::new(midi_rx);
-  // test sliced
-  // let mut track = SlicedAudioTrack::new(midi_rx);
-
-  // let mut track = RepitchAudioTrack::new(midi_rx);
-  // track.load_file("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
-  // track.load_file("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
-  track.load_file("/Users/nunja/Documents/Audiolib/smplr/tick_4.wav");
-
   // test some mixer 
-  let mixer = mixer::AudioMixer::new_test();
+  let mut mixer = mixer::AudioMixer::new_test(midi_rx);
 
   // init audio with CPAL !
   // creates event loop
@@ -78,30 +68,12 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
         buffer: UnknownTypeOutputBuffer::F32(mut buffer),
       } => {
         
-        // mixer
-        mixer.get_tracks_number();
-        
         // here we implement the trait sample::ToFrameSliceMut;
         // we can take a mutable buffer from the audio callback, but framed in stereo !!
         let buffer: &mut [Stereo<f32>] = buffer.to_frame_slice_mut().unwrap();
-        // audio tracks can be requested by block of buffer len
-        let size = buffer.len();
 
-        // let re = &sliced_track;
-        // sliced_track;
-        let next_block = track.next_block(size);
-        // // create a mutable iterator
-        let mut it = next_block.iter();
-        // // inject the frames out
-        for out_frame in buffer {
-          // *out_frame = Stereo::<f32>::equilibrium(); // DEBUG
-          match it.next() {
-            Some(frame) => *out_frame = *frame,
-            None => {
-              *out_frame = Stereo::<f32>::equilibrium();
-            }
-          }
-        }
+        // write audio from the mixer
+        mixer.next_block(buffer);
       }
       _ => (),
     }
