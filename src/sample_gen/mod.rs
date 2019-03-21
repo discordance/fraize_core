@@ -15,18 +15,35 @@ extern crate sample;
 extern crate time_calc;
 
 // re-publish submodule repitch as a public module;
-pub mod repitch;
-pub mod slicer;
 pub mod analytics;
 pub mod gen_utils;
+pub mod repitch;
+pub mod slicer;
 
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
 use self::time_calc::Ppqn;
+use std::collections::HashMap;
 
 // pulse per quarter note
 pub const PPQN: Ppqn = 24;
+
+/// SliceMode defines how the slices are cut in a smart buffer.
+/// Can be OnsetDetection or fixed BAR divisions.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum SliceMode {
+  /// Natural detected onsets.
+  OnsetMode(),
+  /// Quantized detected onsets.
+  QonsetMode(),
+  /// Bar / 4 precomputed divisions
+  Bar4Mode(),
+  /// Bar / 8 precomputed divisions
+  Bar8Mode(),
+  /// Bar / 16 precomputed divisions
+  Bar16Mode(),
+}
 
 /// Basically an audio buffer (in frame format) with some metadata from analysis.
 pub struct SmartBuffer {
@@ -36,8 +53,11 @@ pub struct SmartBuffer {
   frames: Vec<Stereo<f32>>,
   /// Original tempo of the audio phrase (if it's a phrase).
   original_tempo: f64,
-  /// Onsets positions, in frames, computed via Aubio bindings.
-  onset_positions: Vec<u64>,
+  /// Number of beats analyzed in audio.
+  num_beats: u64,
+  /// Precomputed slices positions. Contains detected Onsets positions and fixed divisions.
+  /// Useful in the slicer.
+  slices: HashMap<SliceMode, Vec<u64>>,
 }
 
 /// Implementation
@@ -47,7 +67,8 @@ impl SmartBuffer {
     SmartBuffer {
       frames: Vec::new(),
       original_tempo: 120.0,
-      onset_positions: Vec::new(),
+      num_beats: 4,
+      slices: HashMap::<SliceMode, Vec<u64>>::with_capacity(4),
     }
   }
 
@@ -58,7 +79,7 @@ impl SmartBuffer {
       Ok(r) => r,
       Err(err) => {
         println!("Load_wave error {}", err);
-        return Err(concat!("UnreadablePath"))
+        return Err(concat!("UnreadablePath"));
       }
     };
 
@@ -86,18 +107,42 @@ impl SmartBuffer {
       .collect();
 
     // set frames
-    self.frames = frames;  
+    self.frames = frames;
 
     // parse tempo from filename
-    let (orig_tempo, _beats) = analytics::get_original_tempo(path, samples.len());
+    let (orig_tempo, beats) = analytics::get_original_tempo(path, samples.len());
     self.original_tempo = orig_tempo;
+    self.num_beats = beats;
 
     // detect tempo via aubio
     let _detected_tempo = analytics::detect_bpm(&samples[..]);
 
-    // compute onset positions
+    // compute onset positions and store them in the hashmap
     let onset_positions = analytics::detect_onsets(&samples[..]);
-    self.onset_positions = onset_positions;
+    let quantized = analytics::quantize_pos(
+      &onset_positions,
+      self.frames.len() as u64 / (16 * beats as u64),
+    );
+    self.slices.insert(
+      SliceMode::QonsetMode(),
+      quantized,
+    );
+    self.slices.insert(
+      SliceMode::OnsetMode(),
+      onset_positions,
+    );
+    self.slices.insert(
+      SliceMode::Bar4Mode(),
+      analytics::slice_onsets(samples.len(), ((beats/4)*4) as usize),
+    );
+        self.slices.insert(
+      SliceMode::Bar8Mode(),
+      analytics::slice_onsets(samples.len(), ((beats/4)*8) as usize),
+    );
+    self.slices.insert(
+      SliceMode::Bar16Mode(),
+      analytics::slice_onsets(samples.len(), ((beats/4)*16) as usize),
+    );
 
     Ok(true)
   }

@@ -105,7 +105,7 @@ pub fn detect_onsets(samples: &[f32]) -> Vec<u64> {
   positions
 }
 
-/// bpm detector via aubio
+/// bpm detector via aubio.
 pub fn detect_bpm(samples: &[f32]) -> f64 {
   // mono version
   let mono: Vec<f32> = samples.iter().step_by(2).map(|x| *x).collect();
@@ -135,4 +135,25 @@ pub fn detect_bpm(samples: &[f32]) -> f64 {
 
   // return
   detected_tempo as f64
+}
+
+/// Basic division onsets position.
+pub fn slice_onsets(len: usize, divisor: usize) -> Vec<u64> {
+  let step = len/divisor;
+  let mut positions = Vec::new();
+  for x in 0..divisor {
+    positions.push((x*step) as u64);
+  }
+  positions.push(len as u64);
+  return positions
+}
+
+/// Quantize a position vector to factor `multiple`
+pub fn quantize_pos(d: &Vec<u64>, multiple: u64) -> Vec<u64> {
+  let mut new_pos = Vec::new();
+  for pos in d.iter() {
+    let q = (*pos as f32 / multiple as f32).round() * multiple as f32;
+    new_pos.push(q as u64);
+  }
+  new_pos
 }

@@ -89,7 +89,7 @@ impl AudioMixer {
 
     // check errors
     // @TODO and error checking ?
-    s1.load_wave("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
+    s1.load_wave("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
     s2.load_wave("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
     // create two gens

@@ -6,17 +6,6 @@ use self::sample::{Frame, Sample};
 use self::time_calc::Ticks;
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 
-/// SlicerMode defines how the slices are cut.
-/// Could be based on OnsetDetection or fixed BAR divisions.
-pub enum SlicerMode {
-  OnsetMode(),
-  /// precomputed divisions with respect to the smart_buffer
-  Bar4Mode(),
-  /// precomputed divisions with respect to the smart_buffer
-  Bar8Mode(), 
-  /// precomputed divisions with respect to the smart_buffer
-  Bar16Mode(),
-}
 
 /// Slicer sample generator.
 /// Use a method inspired by Beat Slicers.
@@ -25,8 +14,10 @@ pub struct SlicerGen {
   sample_gen: SampleGen,
   /// Keeps track of previous slice
   pslice: usize,
-  // Cursor is the playhead relative to the current slice
+  /// Cursor is the playhead relative to the current slice
   cursor: i64,
+  /// SliceMode define which kind of positions to use in the slicer
+  slicer_mode: super::SliceMode,
 }
 
 /// Specific sub SampleGen implementation
@@ -43,13 +34,15 @@ impl SlicerGen {
       },
       pslice: 0,
       cursor: 0,
+      slicer_mode: super::SliceMode::Bar16Mode(),
     }
   }
 
   /// Main Logic of Slicer computing the nextframe
   fn slicer_next_frame(&mut self) -> Stereo<f32> {
     // slice positions ref
-    let positions = &self.sample_gen.smartbuf.onset_positions;
+    // depends on slicer mode
+    let positions = &self.sample_gen.smartbuf.slices[&self.slicer_mode];
     // all frames
     let frames = &self.sample_gen.smartbuf.frames;
     // total number of frames in the buffer
@@ -119,8 +112,7 @@ impl SampleGenerator for SlicerGen {
     // simply move in the buffer
     self.sample_gen.smartbuf = smartbuf;
     // init the previous slice
-    // @TODO or zero ?
-    self.pslice = self.sample_gen.smartbuf.onset_positions.len() - 1;
+    self.pslice = self.sample_gen.smartbuf.slices[&self.slicer_mode].len() - 1;
   }
 
   /// sets play
@@ -166,7 +158,7 @@ impl SampleGenerator for SlicerGen {
   fn reset(&mut self) {
     // here is useless to reset the frame index as it closely follows the mixer ticks
     // self.sample_gen.frame_index = 0;
-    self.pslice = self.sample_gen.smartbuf.onset_positions.len() - 1;
+    self.pslice = self.sample_gen.smartbuf.slices[&self.slicer_mode].len() - 1;
     self.cursor = 0;
   }
 
