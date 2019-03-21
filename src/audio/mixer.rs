@@ -102,7 +102,7 @@ impl AudioMixer {
     let track1 = AudioTrack::new(Box::new(gen1));
     let track2 = AudioTrack::new(Box::new(gen2));
     tracks.push(track1);
-    tracks.push(track2);
+    // tracks.push(track2);
 
     AudioMixer {
       tracks: tracks,

@@ -66,7 +66,6 @@ impl RePitchGen {
 
 /// SampleGenerator implementation for RePitchGen
 impl SampleGenerator for RePitchGen {
-
   /// Loads a SmartBuffer, moving
   fn load_buffer(&mut self, smartbuf: SmartBuffer) {
     // simply move
@@ -97,6 +96,7 @@ impl SampleGenerator for RePitchGen {
     // calculates the new playback rate
     let new_rate = global_tempo as f64 / original_tempo;
 
+    // println!("gtempo: {} tick: {} newrate: {}", global_tempo, tick, new_rate);
     // has the tempo changed ? update accordingly
     if self.sample_gen.playback_rate != new_rate {
       // simple update
@@ -143,16 +143,17 @@ impl Iterator for RePitchGen {
 
   /// Next computes the next frame and returns a Stereo<f32>
   fn next(&mut self) -> Option<Self::Item> {
-    // get next frame and updates the frame_index accordingly.
-    // this is wrapping / looping in the buffer the circular way thanks to the modulo %.
-    let frames = &self.sample_gen.smartbuf.frames;
-    let next_frame = frames[self.sample_gen.frame_index as usize % frames.len()];
-
-    // increment the counter of frames
-    self.sample_gen.frame_index += 1;
-
     // advance frames and calc interp val
     while self.interpolation.interp_val >= 1.0 {
+      // get next frame and updates the frame_index accordingly.
+      // this is wrapping / looping in the buffer the circular way thanks to the modulo %.
+      let frames = &self.sample_gen.smartbuf.frames;
+      let next_frame = frames[self.sample_gen.frame_index as usize % frames.len()];
+
+      // increment the counter of frames
+      self.sample_gen.frame_index += 1;
+
+      // interpolate
       let f0 = next_frame;
       self.interpolation.next_source_frame(f0);
       self.interpolation.interp_val -= 1.0;
