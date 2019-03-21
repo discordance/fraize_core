@@ -102,7 +102,7 @@ impl AudioMixer {
     let track1 = AudioTrack::new(Box::new(gen1));
     let track2 = AudioTrack::new(Box::new(gen2));
     tracks.push(track1);
-    // tracks.push(track2);
+    tracks.push(track2);
 
     AudioMixer {
       tracks: tracks,
@@ -143,11 +143,6 @@ impl AudioMixer {
       frame_out[0] = acc[0] as f32;
       frame_out[1] = acc[1] as f32;
     }
-
-    // write zeros
-    // for frame_out in block_out.iter_mut() {
-    //   *frame_out = Stereo::<f32>::equilibrium();
-    // }
   }
 
   /// Reads commands from the bus
