@@ -7,6 +7,7 @@ use self::bus::BusReader;
 use self::sample::frame::{Frame, Stereo};
 
 use sample_gen::repitch::RePitchGen;
+use sample_gen::slicer::SlicerGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 
 /// AudioTrack is a AudioMixer track that embeds one sample generator and a chain of effects.
@@ -88,11 +89,11 @@ impl AudioMixer {
 
     // check errors
     // @TODO and error checking ?
-    s1.load_wave("/Users/nunja/Documents/Audiolib/smplr/tick_4.wav");
-    s2.load_wave("/Users/nunja/Documents/Audiolib/smplr/tick_4.wav");
+    s1.load_wave("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
+    s2.load_wave("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
     // create two gens
-    let mut gen1 = RePitchGen::new();
+    let mut gen1 = SlicerGen::new();
     gen1.load_buffer(s1);
     let mut gen2 = RePitchGen::new();
     gen2.load_buffer(s2);
@@ -102,7 +103,7 @@ impl AudioMixer {
     let track1 = AudioTrack::new(Box::new(gen1));
     let track2 = AudioTrack::new(Box::new(gen2));
     tracks.push(track1);
-    tracks.push(track2);
+    // tracks.push(track2);
 
     AudioMixer {
       tracks: tracks,
@@ -155,12 +156,14 @@ impl AudioMixer {
             for track in self.tracks.iter_mut() {
               track.play();
             }
+            self.clock_ticks = 0;
           }
           ::midi::SyncMessage::Stop() => {
             // mute all tracks
             for track in self.tracks.iter_mut() {
               track.stop();
             }
+            self.clock_ticks = 0;
           }
           ::midi::SyncMessage::Tick(_tick) => {
             // update tracks sync

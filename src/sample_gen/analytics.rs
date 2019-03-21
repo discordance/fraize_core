@@ -8,9 +8,8 @@ use std::path::Path;
 use self::aubio::onset::Onset;
 use self::aubio::tempo::Tempo;
 use self::num::ToPrimitive;
-// use self::sample::frame::Stereo;
 use self::time_calc::{Samples};
-// use std::f32;
+
 
 // consts
 const HOP_SIZE: usize = 512;

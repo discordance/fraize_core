@@ -5,22 +5,16 @@ extern crate cpal;
 extern crate sample;
 
 mod mixer;
-mod repitch_track;
-mod sliced_track;
 mod pvoc_track;
 
 mod analytics;
 mod track_utils;
 mod filters;
 
-use sample_gen::repitch;
-
 use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
-use self::sample::frame::{Frame, Stereo};
+use self::sample::frame::{Stereo};
 use self::sample::ToFrameSliceMut;
-use self::repitch_track::RepitchAudioTrack;
-use self::sliced_track::SlicedAudioTrack;
 use self::pvoc_track::PvocAudioTrack;
 
 // initialize audio machinery

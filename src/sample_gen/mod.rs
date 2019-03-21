@@ -16,7 +16,9 @@ extern crate time_calc;
 
 // re-publish submodule repitch as a public module;
 pub mod repitch;
+pub mod slicer;
 pub mod analytics;
+pub mod gen_utils;
 
 use self::hound::WavReader;
 use self::sample::frame::Stereo;

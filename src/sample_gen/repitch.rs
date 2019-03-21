@@ -66,7 +66,7 @@ impl RePitchGen {
 
 /// SampleGenerator implementation for RePitchGen
 impl SampleGenerator for RePitchGen {
-  /// Loads a SmartBuffer, moving
+  /// Loads a SmartBuffer, moving it
   fn load_buffer(&mut self, smartbuf: SmartBuffer) {
     // simply move
     self.sample_gen.smartbuf = smartbuf;
