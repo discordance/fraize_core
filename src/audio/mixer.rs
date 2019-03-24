@@ -8,6 +8,7 @@ use self::sample::frame::{Frame, Stereo};
 
 use sample_gen::repitch::RePitchGen;
 use sample_gen::slicer::SlicerGen;
+use sample_gen::pvoc::PVOCGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 
 /// AudioTrack is a AudioMixer track that embeds one sample generator and a chain of effects.
@@ -93,7 +94,7 @@ impl AudioMixer {
     s2.load_wave("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
     // create two gens
-    let mut gen1 = SlicerGen::new();
+    let mut gen1 = PVOCGen::new();
     gen1.load_buffer(s1);
     let mut gen2 = RePitchGen::new();
     gen2.load_buffer(s2);

@@ -19,6 +19,7 @@ pub mod analytics;
 pub mod gen_utils;
 pub mod repitch;
 pub mod slicer;
+pub mod pvoc;
 
 use self::hound::WavReader;
 use self::sample::frame::Stereo;

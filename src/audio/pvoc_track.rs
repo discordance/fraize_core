@@ -36,13 +36,6 @@ fn round_up(num: i32, multiple: i32) -> i32 {
   return num + multiple - remainder;
 }
 
-// // struct to help interpolation
-// struct LinInterp {
-//   iterp_val: f64,
-//   left: Stereo<f32>,
-//   right: Stereo<f32>,
-// }
-
 // an audio track
 pub struct PvocAudioTrack {
   // commands rx

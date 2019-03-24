@@ -2,7 +2,7 @@ extern crate sample;
 extern crate time_calc;
 
 use self::sample::frame::Stereo;
-use self::sample::{Frame, Sample};
+use self::sample::{Frame};
 use self::time_calc::Ticks;
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 
