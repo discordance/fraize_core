@@ -21,5 +21,6 @@ path = "../aubio-rs"
 # [dependencies.basic_dsp]
 # path = "../basic_dsp"
 
+
 [profile.dev]
 opt-level = 2
