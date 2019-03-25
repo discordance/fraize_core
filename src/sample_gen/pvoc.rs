@@ -60,7 +60,7 @@ impl PVOCUnit {
   /// resets the PVOC Unit.
   fn reset(&mut self) {
     // @TODO Maybe not a good value
-    self.elapsed_hops = 1;
+    self.elapsed_hops = 0;
     self.interp_block = 0;
     self.interp_read = 0.0;
   }
@@ -146,7 +146,6 @@ impl PVOCUnit {
 
     // inc hops
     self.elapsed_hops += 1;
-    // }
   }
 }
 
