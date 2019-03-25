@@ -66,93 +66,87 @@ impl PVOCUnit {
   }
 
   /// Performs a timestretch operation on a block
-  fn process_block(&mut self, input_block: &[f32], playback_rate: f64) {
-    // here
-    for hop_s in input_block.chunks(self.hop_size) {
-      // early break
-      if self.buff_pvoc_out.len() >= input_block.len() {
+  fn process_block(&mut self, hop_s: &[f32], playback_rate: f64) {
+    // compute the first hop, (mono for now)
+    self.pvoc.from_signal(
+      &hop_s,
+      &mut self.local_buffers.norms[..],
+      &mut self.local_buffers.phases[..],
+    );
+
+    // return early if its first block
+    // the phase voc needs a warmup, we keep it silent for the first hop block
+    if self.elapsed_hops == 0 {
+      self.pnorm.copy_from_slice(&self.local_buffers.norms[..]);
+      self.pphas.copy_from_slice(&self.local_buffers.phases[..]);
+      // push silence in the queue
+      for _s in 0..self.hop_size {
+        self.buff_pvoc_out.push(0.0);
+      }
+      self.elapsed_hops += 1;
+      return;
+    }
+
+    // init the phase accumulator
+    if self.elapsed_hops == 1 {
+      self.phas_acc.copy_from_slice(&self.pphas[..]);
+    }
+
+    // interpolation loop
+    loop {
+      // break forgot this
+      if self.interp_read >= self.elapsed_hops as f32 {
+        // println!("SECOND BREAK {}", self.buff_pvoc_out.len());
         break;
       }
 
-      // compute the first hop, (mono for now)
-      self.pvoc.from_signal(
-        &hop_s,
-        &mut self.local_buffers.norms[..],
-        &mut self.local_buffers.phases[..],
+      // used for timestretch
+      let frac = 1.0 - (self.interp_read % 1.0);
+
+      // calc interp
+      for (i, cnorm) in self.local_buffers.norms.iter().enumerate() {
+        self.local_buffers.new_norms[i] = frac * self.pnorm[i] + (1.0 - frac) * cnorm;
+      }
+
+      // phas_acc is updated after
+      self
+        .local_buffers
+        .new_phases
+        .copy_from_slice(&self.phas_acc[..]);
+
+      // compute the new hop
+      self.pvoc.to_signal(
+        &self.local_buffers.new_norms,
+        &self.local_buffers.new_phases,
+        &mut self.local_buffers.new_signal,
       );
 
-      // return early if its first block
-      // the phase voc needs a warmup, we keep it silent for the first hop block
-      if self.elapsed_hops == 0 {
-        self.pnorm.copy_from_slice(&self.local_buffers.norms[..]);
-        self.pphas.copy_from_slice(&self.local_buffers.phases[..]);
-        // push silence in the queue
-        for _s in 0..self.hop_size {
-          self.buff_pvoc_out.push(0.0);
-        }
-        self.elapsed_hops += 1;
-        continue;
+      // push back in buffer
+      self.buff_pvoc_out.extend(&self.local_buffers.new_signal);
+
+      // update the phase
+      for (i, pacc) in self.phas_acc.iter_mut().enumerate() {
+        // calculate phase advance
+        let phas_adv = (i as f32 / (self.analysis_size as f32 - 1.0)) * (PI * self.hop_size as f32);
+        let mut dphas = self.local_buffers.phases[i] - self.pphas[i] - phas_adv;
+        // unwrap angle to [-pi; pi]
+        dphas = unwrap2pi(dphas);
+        // cumulate phase, to be used for next frame
+        *pacc += phas_adv + dphas;
       }
 
-      // init the phase accumulator
-      if self.elapsed_hops == 1 {
-        self.phas_acc.copy_from_slice(&self.pphas[..]);
-      }
-
-      // interpolation loop
-      loop {
-        // break forgot this
-        if self.interp_read >= self.elapsed_hops as f32 {
-          break;
-        }
-
-        // used for timestretch
-        let frac = 1.0 - (self.interp_read % 1.0);
-
-        // calc interp
-        for (i, cnorm) in self.local_buffers.norms.iter().enumerate() {
-          self.local_buffers.new_norms[i] = frac * self.pnorm[i] + (1.0 - frac) * cnorm;
-        }
-
-        // phas_acc is updated after
-        self
-          .local_buffers
-          .new_phases
-          .copy_from_slice(&self.phas_acc[..]);
-
-        // compute the new hop
-        self.pvoc.to_signal(
-          &self.local_buffers.new_norms,
-          &self.local_buffers.new_phases,
-          &mut self.local_buffers.new_signal,
-        );
-
-        // push back in buffer
-        self.buff_pvoc_out.extend(&self.local_buffers.new_signal);
-
-        // update the phase
-        for (i, pacc) in self.phas_acc.iter_mut().enumerate() {
-          // calculate phase advance
-          let phas_adv = (i as f32 / (self.analysis_size as f32 - 1.0)) * (PI * self.hop_size as f32);
-          let mut dphas = self.local_buffers.phases[i] - self.pphas[i] - phas_adv;
-          // unwrap angle to [-pi; pi]
-          dphas = unwrap2pi(dphas);
-          // cumulate phase, to be used for next frame
-          *pacc += phas_adv + dphas;
-        }
-
-        // interpolation counters
-        self.interp_block += 1;
-        self.interp_read = self.interp_block as f32 * playback_rate as f32;
-      }
-
-      // copy anyway
-      self.pnorm.copy_from_slice(&self.local_buffers.norms[..]);
-      self.pphas.copy_from_slice(&self.local_buffers.phases[..]);
-
-      // inc hops
-      self.elapsed_hops += 1;
+      // interpolation counters
+      self.interp_block += 1;
+      self.interp_read = self.interp_block as f32 * playback_rate as f32;
     }
+
+    // copy anyway
+    self.pnorm.copy_from_slice(&self.local_buffers.norms[..]);
+    self.pphas.copy_from_slice(&self.local_buffers.phases[..]);
+
+    // inc hops
+    self.elapsed_hops += 1;
+    // }
   }
 }
 
@@ -269,23 +263,36 @@ impl SampleGenerator for PVOCGen {
       return;
     }
 
-    // grab some samples for processing, the size of the block_out buffer
-    for _frame_out in block_out.iter_mut() {
-      match self.next() {
-        Some(f) => self.input_buff.push(f[0]),
-        None => self.input_buff.push(0.0),
-      };
+    // hop loop
+    // @TODO only working for one pvoc unit as now
+    loop {
+      // early break
+      if self.pvoc_1.buff_pvoc_out.len() >= block_out.len() {
+        break;
+      }
+
+      // fill input buffer with hop samples
+      let hop_size = self.pvoc_1.hop_size;
+      for _ in 0..hop_size {
+        match self.next() {
+          Some(f) => self.input_buff.push(f[0]),
+          None => self.input_buff.push(0.0),
+        };
+      }
+
+      // process in pvoc 1
+      self.pvoc_1.process_block(&self.input_buff[..], self.sample_gen.playback_rate);
+
+      // clear input
+      self.input_buff.clear();
     }
 
-    // process in pvoc 1
-    self.pvoc_1.process_block(&self.input_buff[..], self.sample_gen.playback_rate);
-    
     // drain pvoc 1
     let mut drained = self.pvoc_1.buff_pvoc_out.drain(0..block_out.len());
-    for (i, frame_out) in block_out.iter_mut().enumerate() {
-      match drained.next(){
-        Some(s) => *frame_out = [s*0.1, s*0.1],
-        None => *frame_out = Stereo::<f32>::equilibrium()
+    for frame_out in block_out.iter_mut() {
+      match drained.next() {
+        Some(s) => *frame_out = [s * 0.1, s * 0.1],
+        None => *frame_out = Stereo::<f32>::equilibrium(),
       };
     }
   }
