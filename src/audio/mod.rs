@@ -5,17 +5,12 @@ extern crate cpal;
 extern crate sample;
 
 mod mixer;
-mod pvoc_track;
-
-mod analytics;
-mod track_utils;
 mod filters;
 
 use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
 use self::sample::frame::{Stereo};
 use self::sample::ToFrameSliceMut;
-use self::pvoc_track::PvocAudioTrack;
 
 // initialize audio machinery
 pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
