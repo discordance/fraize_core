@@ -1,7 +1,7 @@
 # PHRASE SAMPLER
 
-An experiment with Rust and Audio as a learning medium.
-Rust is a promising new language to experiment with audio processing because it provides memory safety without the use of a Garbage Collector, which is a burden to many real time audio applications.
+An experiment using Rust for audio processing.
+Rust is a promising new language to experiment with audio processing because it provides memory safety without the use of a Garbage Collector, which is a no-go with many real time audio applications.
 
 ## Goals
 
