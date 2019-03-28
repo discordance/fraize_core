@@ -9,6 +9,7 @@ This phrase sampler is an attempt to create a basic headless audio loops player,
 
 ## TODO
 
+- Properly use the sample crate, its gold.
 - Implement features beyond simple sample player engines, as effects and mixers.
 - Implement a proper headless sample lib manager.
 - Implement MIDI controllable parameters.

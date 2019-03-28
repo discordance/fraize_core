@@ -8,12 +8,14 @@ rand = "0.3.14"
 midir = "0.5.0"
 bus = "2.0.0"
 time_calc = "0.13.0"
-cpal = "0.8.2"
+# cpal = "0.8.2"
 hound = "3.4.0"
 sample = "0.10.0"
 num = "0.1.28"
 elapsed = "0.1"
-# pvoc = "0.1.4"
+
+[dependencies.cpal]
+path = "../cpal"
 
 [dependencies.aubio]
 path = "../aubio-rs"

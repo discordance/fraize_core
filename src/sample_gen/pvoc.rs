@@ -11,6 +11,7 @@ use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 ///
 const PI: f32 = std::f32::consts::PI;
 const TWO_PI: f32 = std::f32::consts::PI * 2.0;
+const PVOC_1_GAIN: f32 = 0.4;
 
 fn unwrap2pi(phase: f32) -> f32 {
   return phase + TWO_PI * (1. + (-(phase + PI) / TWO_PI).floor());
@@ -19,10 +20,10 @@ fn unwrap2pi(phase: f32) -> f32 {
 /// Just memory holders to help with PVOC timestretching maths.
 /// Avoids re-alloc.
 struct PVOCLocalBuffers {
-  norms: Vec<f32>,
-  phases: Vec<f32>,
-  new_norms: Vec<f32>,
-  new_phases: Vec<f32>,
+  curr_norm: Vec<f32>,
+  curr_phase: Vec<f32>,
+  new_norm: Vec<f32>,
+  new_phase: Vec<f32>,
   new_signal: Vec<f32>,
 }
 
@@ -70,15 +71,15 @@ impl PVOCUnit {
     // compute the first hop, (mono for now)
     self.pvoc.from_signal(
       &hop_s,
-      &mut self.local_buffers.norms[..],
-      &mut self.local_buffers.phases[..],
+      &mut self.local_buffers.curr_norm[..],
+      &mut self.local_buffers.curr_phase[..],
     );
 
     // return early if its first block
     // the phase voc needs a warmup, we keep it silent for the first hop block
     if self.elapsed_hops == 0 {
-      self.pnorm.copy_from_slice(&self.local_buffers.norms[..]);
-      self.pphas.copy_from_slice(&self.local_buffers.phases[..]);
+      self.pnorm.copy_from_slice(&self.local_buffers.curr_norm[..]);
+      self.pphas.copy_from_slice(&self.local_buffers.curr_phase[..]);
       // push silence in the queue
       for _s in 0..self.hop_size {
         self.buff_pvoc_out.push(0.0);
@@ -104,20 +105,20 @@ impl PVOCUnit {
       let frac = 1.0 - (self.interp_read % 1.0);
 
       // calc interp
-      for (i, cnorm) in self.local_buffers.norms.iter().enumerate() {
-        self.local_buffers.new_norms[i] = frac * self.pnorm[i] + (1.0 - frac) * cnorm;
+      for (i, cnorm) in self.local_buffers.curr_norm.iter().enumerate() {
+        self.local_buffers.new_norm[i] = frac * self.pnorm[i] + (1.0 - frac) * cnorm;
       }
 
       // phas_acc is updated after
       self
         .local_buffers
-        .new_phases
+        .new_phase
         .copy_from_slice(&self.phas_acc[..]);
 
       // compute the new hop
       self.pvoc.to_signal(
-        &self.local_buffers.new_norms,
-        &self.local_buffers.new_phases,
+        &self.local_buffers.new_norm,
+        &self.local_buffers.new_phase,
         &mut self.local_buffers.new_signal,
       );
 
@@ -128,7 +129,7 @@ impl PVOCUnit {
       for (i, pacc) in self.phas_acc.iter_mut().enumerate() {
         // calculate phase advance
         let phas_adv = (i as f32 / (self.analysis_size as f32 - 1.0)) * (PI * self.hop_size as f32);
-        let mut dphas = self.local_buffers.phases[i] - self.pphas[i] - phas_adv;
+        let mut dphas = self.local_buffers.curr_phase[i] - self.pphas[i] - phas_adv;
         // unwrap angle to [-pi; pi]
         dphas = unwrap2pi(dphas);
         // cumulate phase, to be used for next frame
@@ -141,8 +142,8 @@ impl PVOCUnit {
     }
 
     // copy anyway
-    self.pnorm.copy_from_slice(&self.local_buffers.norms[..]);
-    self.pphas.copy_from_slice(&self.local_buffers.phases[..]);
+    self.pnorm.copy_from_slice(&self.local_buffers.curr_norm[..]);
+    self.pphas.copy_from_slice(&self.local_buffers.curr_phase[..]);
 
     // inc hops
     self.elapsed_hops += 1;
@@ -166,8 +167,8 @@ impl PVOCGen {
   /// Inits and return a new SlicerGen sample generator
   pub fn new() -> Self {
     // pvoc 1 vars
-    let pvoc_1_window_size = 512;
-    let pvoc_1_hopsize = 32;
+    let pvoc_1_window_size = 1024;
+    let pvoc_1_hopsize = 128;
     let pvoc_1_analyse_size = pvoc_1_window_size / 2 + 1;
     PVOCGen {
       sample_gen: SampleGen {
@@ -190,10 +191,10 @@ impl PVOCGen {
         interp_read: 0.0,
         interp_block: 0,
         local_buffers: PVOCLocalBuffers {
-          norms: vec![0.0; pvoc_1_analyse_size],
-          phases: vec![0.0; pvoc_1_analyse_size],
-          new_norms: vec![0.0; pvoc_1_analyse_size],
-          new_phases: vec![0.0; pvoc_1_analyse_size],
+          curr_norm: vec![0.0; pvoc_1_analyse_size],
+          curr_phase: vec![0.0; pvoc_1_analyse_size],
+          new_norm: vec![0.0; pvoc_1_analyse_size],
+          new_phase: vec![0.0; pvoc_1_analyse_size],
           new_signal: vec![0.0; pvoc_1_hopsize],
         },
       },
@@ -286,11 +287,12 @@ impl SampleGenerator for PVOCGen {
       self.input_buff.clear();
     }
 
-    // drain pvoc 1
+    // drain pvoc 1 and write it to block_out
     let mut drained = self.pvoc_1.buff_pvoc_out.drain(0..block_out.len());
     for frame_out in block_out.iter_mut() {
       match drained.next() {
-        Some(s) => *frame_out = [s * 0.1, s * 0.1],
+        // yes here it needs some gain
+        Some(s) => *frame_out = [s * PVOC_1_GAIN, s * PVOC_1_GAIN],
         None => *frame_out = Stereo::<f32>::equilibrium(),
       };
     }

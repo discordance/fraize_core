@@ -30,13 +30,18 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
     .supported_output_formats()
     .expect("audio: error while querying formats");
 
-  let format = supported_formats_range
+  let mut format = supported_formats_range
     .next()
     .expect("audio: No supported format.")
     .with_max_sample_rate();
 
+  // force the sample rate
+  format.sample_rate = cpal::SampleRate(44100);
+
   // display some info
-  println!("audio: Default OUTPUT Samplerate: {}", format.sample_rate.0);
+  println!("audio device: {}", device.name());
+  println!("audio: Fixed OUTPUT Samplerate: {}", format.sample_rate.0);
+
   match format.data_type {
     SampleFormat::U16 => println!("audio: Supported sample type is U16"),
     SampleFormat::I16 => println!("audio: Supported sample type is I16"),
@@ -44,7 +49,7 @@ pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
   }
 
   // creates the stream
-  let stream_id = event_loop.build_output_stream(&device, &format).unwrap();
+  let stream_id = event_loop.build_output_stream(&device, &format, &mut cpal::BufferSize::Fixed(128)).unwrap();
 
   // add stream
   event_loop.play_stream(stream_id);
