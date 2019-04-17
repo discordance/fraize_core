@@ -31,6 +31,8 @@ impl SlicerGen {
         playback_mult: 0,
         playing: false,
         smartbuf: SmartBuffer::new_empty(),
+        sync_cursor:0,
+        sync_next_frame_index:0,
       },
       pslice: 0,
       cursor: 0,
@@ -107,27 +109,31 @@ impl SlicerGen {
 
 /// SampleGenerator implementation for SlicerGen
 impl SampleGenerator for SlicerGen {
+  /// Yields processed block out of the samplegen.
+  /// This lazy method trigger all the processing.
+  fn next_block(&mut self, block_out: &mut [Stereo<f32>]) {
+    // println!("block call {}", self.sample_gen.playing);
+    // just write zero stero frames
+    if !self.sample_gen.playing {
+      for frame_out in block_out.iter_mut() {
+        *frame_out = Stereo::<f32>::equilibrium();
+      }
+      return;
+    }
+
+    // playing, simply use the iterator
+    for frame_out in block_out.iter_mut() {
+      // can safely be unwrapped because always return something
+      *frame_out = self.next().unwrap();
+    }
+  }
+
   /// Loads a SmartBuffer, moving it
   fn load_buffer(&mut self, smartbuf: SmartBuffer) {
     // simply move in the buffer
     self.sample_gen.smartbuf = smartbuf;
     // init the previous slice
     self.pslice = self.sample_gen.smartbuf.slices[&self.slicer_mode].len() - 1;
-  }
-
-  /// sets play
-  /// @TODO Notify Error if no frame sto read.println.
-  fn play(&mut self) {
-    // check if the smart buffer is ready
-    if self.sample_gen.smartbuf.frames.len() > 0 {
-      self.sample_gen.playing = true;
-    }
-  }
-
-  /// sets stop
-  fn stop(&mut self) {
-    self.reset();
-    self.sample_gen.playing = false;
   }
 
   /// Sync the slicer according to global values
@@ -149,6 +155,21 @@ impl SampleGenerator for SlicerGen {
     }
   }
 
+  /// sets play
+  /// @TODO Notify Error if no frame sto read.println.
+  fn play(&mut self) {
+    // check if the smart buffer is ready
+    if self.sample_gen.smartbuf.frames.len() > 0 {
+      self.sample_gen.playing = true;
+    }
+  }
+
+  /// sets stop
+  fn stop(&mut self) {
+    self.reset();
+    self.sample_gen.playing = false;
+  }
+
   /// sets the playback multiplicator
   fn set_playback_mult(&mut self, playback_mult: u64) {
     self.sample_gen.playback_mult = playback_mult;
@@ -160,25 +181,6 @@ impl SampleGenerator for SlicerGen {
     // self.sample_gen.frame_index = 0;
     self.pslice = self.sample_gen.smartbuf.slices[&self.slicer_mode].len() - 1;
     self.cursor = 0;
-  }
-
-  /// Yields processed block out of the samplegen.
-  /// This lazy method trigger all the processing.
-  fn next_block(&mut self, block_out: &mut [Stereo<f32>]) {
-    // println!("block call {}", self.sample_gen.playing);
-    // just write zero stero frames
-    if !self.sample_gen.playing {
-      for frame_out in block_out.iter_mut() {
-        *frame_out = Stereo::<f32>::equilibrium();
-      }
-      return;
-    }
-
-    // playing, simply use the iterator
-    for frame_out in block_out.iter_mut() {
-      // can safely be unwrapped because always return something
-      *frame_out = self.next().unwrap();
-    }
   }
 }
 

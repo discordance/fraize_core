@@ -54,6 +54,8 @@ impl RePitchGen {
         playback_mult: 0,
         playing: false,
         smartbuf: SmartBuffer::new_empty(),
+        sync_cursor:0,
+        sync_next_frame_index:0,
       },
       interpolation: LinInterp {
         interp_val: 0.0,
@@ -66,56 +68,6 @@ impl RePitchGen {
 
 /// SampleGenerator implementation for RePitchGen
 impl SampleGenerator for RePitchGen {
-  /// Loads a SmartBuffer, moving it
-  fn load_buffer(&mut self, smartbuf: SmartBuffer) {
-    // simply move
-    self.sample_gen.smartbuf = smartbuf;
-  }
-
-  /// sets play
-  /// @TODO Notify Error if no frame sto read
-  fn play(&mut self) {
-    // check if the smart buffer is ready
-    if self.sample_gen.smartbuf.frames.len() > 0 {
-      self.sample_gen.playing = true;
-    }
-  }
-
-  /// sets stop
-  fn stop(&mut self) {
-    self.reset();
-    self.sample_gen.playing = false;
-  }
-
-  /// Sync the sample buffer according to global values
-  fn sync(&mut self, global_tempo: u64, tick: u64) {
-    // calculate elapsed clock frames according to the original tempo
-    let original_tempo = self.sample_gen.smartbuf.original_tempo;
-    let clock_frames = Ticks(tick as i64).samples(original_tempo, PPQN, 44_100.0) as u64;
-
-    // calculates the new playback rate
-    let new_rate = global_tempo as f64 / original_tempo;
-
-    // println!("gtempo: {} tick: {} newrate: {}", global_tempo, tick, new_rate);
-    // has the tempo changed ? update accordingly
-    if self.sample_gen.playback_rate != new_rate {
-      // simple update
-      self.sample_gen.playback_rate = new_rate;
-      // set the clock frames
-      self.sample_gen.frame_index = clock_frames;
-    }
-  }
-
-  /// sets the playback multiplicator
-  fn set_playback_mult(&mut self, playback_mult: u64) {
-    self.sample_gen.playback_mult = playback_mult;
-  }
-
-  /// resets Sample Generator to start position.
-  fn reset(&mut self) {
-    self.sample_gen.frame_index = 0;
-  }
-
   /// Yields processed block out of the samplegen.
   /// This lazy method trigger all the processing.
   fn next_block(&mut self, block_out: &mut [Stereo<f32>]) {
@@ -133,6 +85,57 @@ impl SampleGenerator for RePitchGen {
       // can safely be unwrapped because always return something
       *frame_out = self.next().unwrap();
     }
+  }
+
+  /// Loads a SmartBuffer, moving it
+  fn load_buffer(&mut self, smartbuf: SmartBuffer) {
+    // simply move
+    self.sample_gen.smartbuf = smartbuf;
+  }
+
+  /// Sync the sample buffer according to global values
+  fn sync(&mut self, global_tempo: u64, tick: u64) {
+    // calculate elapsed clock frames according to the original tempo
+    let original_tempo = self.sample_gen.smartbuf.original_tempo;
+    let clock_frames = Ticks(tick as i64).samples(original_tempo, PPQN, 44_100.0) as u64;
+
+    // calculates the new playback rate
+    let new_rate = global_tempo as f64 / original_tempo;
+
+    // println!("gtempo: {} tick: {} newrate: {}", global_tempo, tick, new_rate);
+    // has the tempo changed ? update accordingly
+    if self.sample_gen.playback_rate != new_rate {
+      // simple update
+      self.sample_gen.playback_rate = new_rate;
+      // set the clock frames
+      // @TODO this clicks
+      self.sample_gen.frame_index = clock_frames;
+    }
+  }
+
+  /// sets play
+  /// @TODO Notify Error if no frame sto read
+  fn play(&mut self) {
+    // check if the smart buffer is ready
+    if self.sample_gen.smartbuf.frames.len() > 0 {
+      self.sample_gen.playing = true;
+    }
+  }
+
+  /// sets stop
+  fn stop(&mut self) {
+    self.reset();
+    self.sample_gen.playing = false;
+  }
+
+  /// sets the playback multiplicator
+  fn set_playback_mult(&mut self, playback_mult: u64) {
+    self.sample_gen.playback_mult = playback_mult;
+  }
+
+  /// resets Sample Generator to start position.
+  fn reset(&mut self) {
+    self.sample_gen.frame_index = 0;
   }
 }
 

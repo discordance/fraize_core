@@ -167,8 +167,8 @@ impl PVOCGen {
   /// Inits and return a new SlicerGen sample generator
   pub fn new() -> Self {
     // pvoc 1 vars
-    let pvoc_1_window_size = 1024;
-    let pvoc_1_hopsize = 128;
+    let pvoc_1_window_size = 512;
+    let pvoc_1_hopsize = 32;
     let pvoc_1_analyse_size = pvoc_1_window_size / 2 + 1;
     PVOCGen {
       sample_gen: SampleGen {
@@ -177,6 +177,8 @@ impl PVOCGen {
         playback_mult: 0,
         playing: false,
         smartbuf: SmartBuffer::new_empty(),
+        sync_cursor:0,
+        sync_next_frame_index:0,
       },
       pvoc_1: PVOCUnit {
         hop_size: pvoc_1_hopsize,
@@ -205,52 +207,6 @@ impl PVOCGen {
 
 /// SampleGenerator implementation for SlicerGen
 impl SampleGenerator for PVOCGen {
-  /// Loads a SmartBuffer, moving it
-  fn load_buffer(&mut self, smartbuf: SmartBuffer) {
-    // simply move in the buffer
-    self.sample_gen.smartbuf = smartbuf;
-  }
-
-  /// sets play
-  /// @TODO Notify Error if no frame sto read.println.
-  fn play(&mut self) {
-    // check if the smart buffer is ready
-    if self.sample_gen.smartbuf.frames.len() > 0 {
-      self.sample_gen.playing = true;
-    }
-  }
-
-  /// sets stop
-  fn stop(&mut self) {
-    self.reset();
-    self.sample_gen.playing = false;
-  }
-
-  /// Sync the slicer according to global values
-  fn sync(&mut self, global_tempo: u64, tick: u64) {
-    // calculate elapsed clock frames according to the original tempo
-    let original_tempo = self.sample_gen.smartbuf.original_tempo;
-    let clock_frames = Ticks(tick as i64).samples(original_tempo, PPQN, 44_100.0) as u64;
-
-    // calculates the new playback rate
-    let new_rate = global_tempo as f64 / original_tempo;
-
-    // has the tempo changed ? update accordingly
-    if self.sample_gen.playback_rate != new_rate {
-      // simple update
-      self.sample_gen.playback_rate = new_rate;
-      // set the frameindex relative to the mixer ticks
-      self.sample_gen.frame_index = clock_frames;
-      // needs to reset the PVOC
-      self.pvoc_1.reset();
-    }
-  }
-
-  /// sets the playback multiplicator
-  fn set_playback_mult(&mut self, playback_mult: u64) {
-    self.sample_gen.playback_mult = playback_mult;
-  }
-
   /// Yields processed block out of the samplegen.
   /// This lazy method trigger all the processing.
   fn next_block(&mut self, block_out: &mut [Stereo<f32>]) {
@@ -296,6 +252,52 @@ impl SampleGenerator for PVOCGen {
         None => *frame_out = Stereo::<f32>::equilibrium(),
       };
     }
+  }
+
+  /// Loads a SmartBuffer, moving it
+  fn load_buffer(&mut self, smartbuf: SmartBuffer) {
+    // simply move in the buffer
+    self.sample_gen.smartbuf = smartbuf;
+  }
+
+  /// Sync the slicer according to global values
+  fn sync(&mut self, global_tempo: u64, tick: u64) {
+    // calculate elapsed clock frames according to the original tempo
+    let original_tempo = self.sample_gen.smartbuf.original_tempo;
+    let clock_frames = Ticks(tick as i64).samples(original_tempo, PPQN, 44_100.0) as u64;
+
+    // calculates the new playback rate
+    let new_rate = global_tempo as f64 / original_tempo;
+
+    // has the tempo changed ? update accordingly
+    if self.sample_gen.playback_rate != new_rate {
+      // simple update
+      self.sample_gen.playback_rate = new_rate;
+      // set the frameindex relative to the mixer ticks
+      self.sample_gen.frame_index = clock_frames;
+      // needs to reset the PVOC
+      self.pvoc_1.reset();
+    }
+  }
+
+  /// sets play
+  /// @TODO Notify Error if no frame sto read.println.
+  fn play(&mut self) {
+    // check if the smart buffer is ready
+    if self.sample_gen.smartbuf.frames.len() > 0 {
+      self.sample_gen.playing = true;
+    }
+  }
+
+  /// sets stop
+  fn stop(&mut self) {
+    self.reset();
+    self.sample_gen.playing = false;
+  }
+
+  /// sets the playback multiplicator
+  fn set_playback_mult(&mut self, playback_mult: u64) {
+    self.sample_gen.playback_mult = playback_mult;
   }
 
   /// resets Sample Generator to start position.

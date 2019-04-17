@@ -17,9 +17,9 @@ extern crate time_calc;
 // re-publish submodule repitch as a public module;
 pub mod analytics;
 pub mod gen_utils;
+pub mod pvoc;
 pub mod repitch;
 pub mod slicer;
-pub mod pvoc;
 
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
@@ -92,30 +92,25 @@ impl SmartBuffer {
       .map(i16::to_sample::<f32>)
       .collect();
 
-    // set in frames format
-    let frames: Vec<Stereo<f32>> = samples
-      .chunks(2)
-      .map(|x| {
-        let f = (x.get(0), x.get(1));
-        // :D
-        match f {
-          (Some(l), Some(r)) => [*l, *r],
-          (Some(l), None) => [*l, 0.0f32],
-          (None, Some(r)) => [0.0f32, *r],
-          (None, None) => Stereo::<f32>::equilibrium(),
-        }
-      })
-      .collect();
+    // store in frames format
+    let frames  = sample::slice::to_frame_slice(&samples[..]).unwrap() as &[Stereo<f32>]; // needed to be explicit
+    self.frames = frames.to_vec();
 
-    // set frames
-    self.frames = frames;
+    // analyse
+    self.analyse(&samples[..], path);
 
+    Ok(true)
+  }
+
+  /// perform analysis
+  fn analyse(&mut self, samples: &[f32], path: &str) {
     // parse tempo from filename
     let (orig_tempo, beats) = analytics::get_original_tempo(path, samples.len());
     self.original_tempo = orig_tempo;
     self.num_beats = beats;
 
     // detect tempo via aubio
+    // @TODO implement it properly
     let _detected_tempo = analytics::detect_bpm(&samples[..]);
 
     // compute onset positions and store them in the hashmap
@@ -124,35 +119,36 @@ impl SmartBuffer {
       &onset_positions,
       self.frames.len() as u64 / (16 * beats as u64),
     );
-    self.slices.insert(
-      SliceMode::QonsetMode(),
-      quantized,
-    );
-    self.slices.insert(
-      SliceMode::OnsetMode(),
-      onset_positions,
-    );
+
+    // store quantized onsets
+    self.slices.insert(SliceMode::QonsetMode(), quantized);
+
+    // store detected onsets
+    self.slices.insert(SliceMode::OnsetMode(), onset_positions);
+
+    // store slice onsets
     self.slices.insert(
       SliceMode::Bar4Mode(),
-      analytics::slice_onsets(samples.len(), ((beats/4)*4) as usize),
-    );
-        self.slices.insert(
-      SliceMode::Bar8Mode(),
-      analytics::slice_onsets(samples.len(), ((beats/4)*8) as usize),
-    );
-    self.slices.insert(
-      SliceMode::Bar16Mode(),
-      analytics::slice_onsets(samples.len(), ((beats/4)*16) as usize),
+      analytics::slice_onsets(samples.len(), ((beats / 4) * 4) as usize),
     );
 
-    Ok(true)
+    // store slice onsets
+    self.slices.insert(
+      SliceMode::Bar8Mode(),
+      analytics::slice_onsets(samples.len(), ((beats / 4) * 8) as usize),
+    );
+
+    // store slice onsets
+    self.slices.insert(
+      SliceMode::Bar16Mode(),
+      analytics::slice_onsets(samples.len(), ((beats / 4) * 16) as usize),
+    );
   }
 }
 
 /// SampleGen, abstract level struct common to all samples generators.
 /// Used to store common fields, we use Structural composition to `extend` this.
-/// SampleGens are also iterators internally.
-pub struct SampleGen {
+struct SampleGen {
   /// smartbuf is the main source of samples and metadata.
   /// The gen will directly use underlying frames as a wrapped buffer.
   smartbuf: SmartBuffer,
@@ -166,7 +162,26 @@ pub struct SampleGen {
   /// `frame_index` gives the current sample index in the SmartBuffer.
   /// This will be corrected by the clock at any change in the playback rate to snap to the clock.
   frame_index: u64,
+  /// Count samples for Fade-Out/Fade-In to avoid clicks when sync
+  sync_cursor: u64,
+  /// Next frame index to sync to when the Fade-Out/Fade-In is at zero
+  sync_next_frame_index: u64
 }
+
+/// Standard implem mainly for sync
+impl SampleGen {
+  /// Synchronise the frame index.
+  /// Inits the Fade Out / Fade In Mechanism
+  fn sync_frame_index(&mut self, new_index: u64) {
+    self.sync_cursor = 0;
+    self.sync_next_frame_index = new_index;
+  }
+
+  fn sync_next_frame(){
+
+  }
+}
+
 
 /// SampleGenerator Trait.
 /// Useful to hide the engines complexity.
