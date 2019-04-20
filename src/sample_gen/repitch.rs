@@ -109,7 +109,8 @@ impl SampleGenerator for RePitchGen {
       self.sample_gen.playback_rate = new_rate;
       // set the clock frames
       // @TODO this clicks
-      self.sample_gen.frame_index = clock_frames;
+      // self.sample_gen.frame_index = clock_frames;
+      self.sample_gen.sync_frame_index(clock_frames);
     }
   }
 
@@ -135,7 +136,8 @@ impl SampleGenerator for RePitchGen {
 
   /// resets Sample Generator to start position.
   fn reset(&mut self) {
-    self.sample_gen.frame_index = 0;
+    //self.sample_gen.frame_index = 0;
+    self.sample_gen.sync_reset();
   }
 }
 
@@ -150,8 +152,8 @@ impl Iterator for RePitchGen {
     while self.interpolation.interp_val >= 1.0 {
       // get next frame and updates the frame_index accordingly.
       // this is wrapping / looping in the buffer the circular way thanks to the modulo %.
-      let frames = &self.sample_gen.smartbuf.frames;
-      let next_frame = frames[self.sample_gen.frame_index as usize % frames.len()];
+//      let frames = &self.sample_gen.smartbuf.frames;
+      let next_frame = self.sample_gen.sync_get_next_frame();
 
       // increment the counter of frames
       self.sample_gen.frame_index += 1;
