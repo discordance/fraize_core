@@ -229,8 +229,6 @@ impl SampleGen {
 /// SampleGenerator Trait.
 /// Useful to hide the engines complexity.
 pub trait SampleGenerator {
-  /// Returns a new SampleGen type instance.
-  // fn new() -> Self;
   /// Processes the next block of samples, write it in referenced frame slice.
   fn next_block(&mut self, block_out: &mut [Stereo<f32>]);
   /// Loads a SmartBuffer using `move`
