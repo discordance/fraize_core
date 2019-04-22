@@ -94,7 +94,7 @@ impl AudioMixer {
     s2.load_wave("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
 
     // create two gens
-    let mut gen1 = RePitchGen::new();
+    let mut gen1 = PVOCGen::new();
     gen1.load_buffer(s1);
     let mut gen2 = RePitchGen::new();
     gen2.load_buffer(s2);
