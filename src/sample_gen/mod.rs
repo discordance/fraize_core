@@ -190,14 +190,14 @@ impl SampleGen {
     // fade in / out
     next_frame = match self.sync_cursor {
       0 ... NOCLICK_FADE_LENGTH => {
-        return next_frame.scale_amp(gen_utils::fade_out(
+        next_frame.scale_amp(gen_utils::fade_out(
           self.sync_cursor as i64,
           NOCLICK_FADE_LENGTH as i64,
           NOCLICK_FADE_LENGTH as i64,
         ))
       },
       _ => {
-         return next_frame.scale_amp(gen_utils::fade_in(
+        next_frame.scale_amp(gen_utils::fade_in(
           self.sync_cursor as i64 - NOCLICK_FADE_LENGTH as i64,
           NOCLICK_FADE_LENGTH as i64,
         ))
@@ -207,6 +207,7 @@ impl SampleGen {
     // check if we must change the frame index now
     if self.sync_cursor == NOCLICK_FADE_LENGTH {
       self.frame_index = self.sync_next_frame_index + NOCLICK_FADE_LENGTH;
+//      println!("should be zero: {:?}", next_frame);
     } else {
       self.frame_index += 1;
     }

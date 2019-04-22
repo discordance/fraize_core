@@ -107,9 +107,9 @@ impl AudioMixer {
     // tracks.push(track2);
 
     AudioMixer {
-      tracks: tracks,
+      tracks,
+      command_rx,
       clock_ticks: 0,
-      command_rx: command_rx,
     }
   }
 

@@ -60,8 +60,7 @@ struct PVOCUnit {
 impl PVOCUnit {
   /// resets the PVOC Unit.
   fn reset(&mut self) {
-    // @TODO Maybe not a good value
-    self.elapsed_hops = 0;
+    self.elapsed_hops = 1;
     self.interp_block = 0;
     self.interp_read = 0.0;
   }
@@ -274,7 +273,7 @@ impl SampleGenerator for PVOCGen {
       // simple update
       self.sample_gen.playback_rate = new_rate;
       // set the frameindex relative to the mixer ticks
-      self.sample_gen.frame_index = clock_frames;
+      self.sample_gen.sync_frame_index(clock_frames);
       // needs to reset the PVOC
       self.pvoc_1.reset();
     }
@@ -303,7 +302,7 @@ impl SampleGenerator for PVOCGen {
   /// resets Sample Generator to start position.
   fn reset(&mut self) {
     // here is useless to reset the frame index as it closely follows the mixer ticks
-    self.sample_gen.frame_index = 0;
+    self.sample_gen.sync_reset();
     self.pvoc_1.reset();
   }
 }
@@ -315,14 +314,8 @@ impl Iterator for PVOCGen {
 
   /// Next computes the next frame and returns a Stereo<f32>
   fn next(&mut self) -> Option<Self::Item> {
-    // get next frame and updates the frame_index accordingly.
-    // this is wrapping / looping in the buffer the circular way thanks to the modulo %.
-    let frames = &self.sample_gen.smartbuf.frames;
-    let next_frame = frames[self.sample_gen.frame_index as usize % frames.len()];
-
-    // increment the counter of frames
-    self.sample_gen.frame_index += 1;
-
+    // get next frame, uses sync function to avoid clicks
+    let next_frame = self.sample_gen.sync_get_next_frame();
     // return to iter
     return Some(next_frame);
   }
