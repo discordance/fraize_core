@@ -207,10 +207,10 @@ impl SampleGen {
     // check if we must change the frame index now
     if self.sync_cursor == NOCLICK_FADE_LENGTH {
       self.frame_index = self.sync_next_frame_index + NOCLICK_FADE_LENGTH;
-//      println!("should be zero: {:?}", next_frame);
     } else {
       self.frame_index += 1;
     }
+
     // inc the sync_cursor
     self.sync_cursor += 1;
 

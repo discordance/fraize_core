@@ -9,31 +9,9 @@ use self::midir::os::unix::VirtualInput;
 use self::midir::MidiInput;
 use self::time_calc::{Ppqn, Ticks};
 
+use control::{ControlMessage, PlaybackMessage, SyncMessage};
+
 const PPQN: Ppqn = 24;
-
-// midi commands (for oth threads)
-#[derive(Clone)]
-pub enum CommandMessage {
-  Playback(PlaybackMessage),
-  // Volume(u8, f32),     //  (track_num, vol)
-  // Distortion(u8, f32), //  (track_num, level)
-}
-
-// midi sync messages
-// composite type for outer world
-#[derive(Clone)]
-pub struct PlaybackMessage {
-  pub sync: SyncMessage,
-  pub time: MidiTime,
-}
-
-// inner midi sync messages
-#[derive(Clone)]
-pub enum SyncMessage {
-  Start(),
-  Stop(),
-  Tick(u64),
-}
 
 // keeps time with midi and calculate useful values
 #[derive(Clone)]
@@ -94,19 +72,20 @@ fn midi_sync_cb(tcode: u64, mid_data: &[u8], tx: &mut Bus<SyncMessage>) {
 
 // broadcast sync to audio tracks! 
 // @TODO its blocking <------ should be non block ?
-fn broadcast_sync(bus: &mut Bus<CommandMessage>, message: SyncMessage, time: MidiTime) {
+fn broadcast_sync(bus: &mut Bus<ControlMessage>, message: SyncMessage, time: MidiTime) {
   // send to audio tracks
-  bus.broadcast(CommandMessage::Playback(PlaybackMessage {
+  bus.broadcast(ControlMessage::Playback(PlaybackMessage {
     sync: message,
-    time: time,
+    time, // midi time
   }));
 }
 
 // initialize midi machinery
-pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<CommandMessage>) {
+pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<ControlMessage>) {
+  // init the control bus
+  let mut control_bus = ::control::initialize_control();
   // bus channel to communicate from the midi callback to audio tracks
-  let mut outer_bus = Bus::new(6);
-  let outer_rx = outer_bus.add_rx();
+  let outer_rx = control_bus.add_rx();
 
   // initialize in its own thread
   let midi_thread = thread::spawn(move || {
@@ -148,20 +127,20 @@ pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<CommandMessage>
           println!("midi: start");
           midi_time.restart();
           // send to audio tracks
-          broadcast_sync(&mut outer_bus, message, midi_time.clone());
+          broadcast_sync(&mut control_bus, message, midi_time.clone());
         }
         // stop received
         SyncMessage::Stop() => {
           println!("midi: stop");
           midi_time.restart();
           // send to audio tracks
-          broadcast_sync(&mut outer_bus, message, midi_time.clone());
+          broadcast_sync(&mut control_bus, message, midi_time.clone());
         }
         // tick received
         SyncMessage::Tick(tcode) => {
           midi_time.tick(tcode);
           // send to audio tracks
-          broadcast_sync(&mut outer_bus, message, midi_time.clone());
+          broadcast_sync(&mut control_bus, message, midi_time.clone());
         }
       }
     }

@@ -13,7 +13,7 @@ use self::sample::frame::{Stereo};
 use self::sample::ToFrameSliceMut;
 
 // initialize audio machinery
-pub fn initialize_audio(midi_rx: BusReader<::midi::CommandMessage>) {
+pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
 
   // test some mixer 
   let mut mixer = mixer::AudioMixer::new_test(midi_rx);

@@ -26,7 +26,7 @@ impl AudioTrack {
   /// new init the track from a sample generator
   fn new(generator: Box<SampleGenerator + 'static + Send>) -> Self {
     AudioTrack {
-      generator: generator,
+      generator,
       // we still dont know how much the buffer wants.
       // let's init at 512 and extend later.
       audio_buffer: Vec::with_capacity(512),
@@ -77,13 +77,13 @@ pub struct AudioMixer {
   /// Clock ticks
   clock_ticks: u64,
   /// Command bus reader. Lockless bus to read command messages
-  command_rx: BusReader<::midi::CommandMessage>,
+  command_rx: BusReader<::control::ControlMessage>,
 }
 
 /// AudioMixer implementation.
 impl AudioMixer {
   /// for testing only
-  pub fn new_test(command_rx: BusReader<::midi::CommandMessage>) -> Self {
+  pub fn new_test(command_rx: BusReader<::control::ControlMessage>) -> Self {
     // load two samples
     let mut s1 = SmartBuffer::new_empty();
     let mut s2 = SmartBuffer::new_empty();
@@ -91,7 +91,7 @@ impl AudioMixer {
     // check errors
     // @TODO and error checking ?
     s1.load_wave("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
-    s2.load_wave("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
+    s2.load_wave("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
 
     // create two gens
     let mut gen1 = PVOCGen::new();
@@ -104,7 +104,7 @@ impl AudioMixer {
     let track1 = AudioTrack::new(Box::new(gen1));
     let track2 = AudioTrack::new(Box::new(gen2));
     tracks.push(track1);
-    // tracks.push(track2);
+    tracks.push(track2);
 
     AudioMixer {
       tracks,
@@ -151,22 +151,22 @@ impl AudioMixer {
   fn fetch_commands(&mut self) {
     match self.command_rx.try_recv() {
       Ok(command) => match command {
-        ::midi::CommandMessage::Playback(playback_message) => match playback_message.sync {
-          ::midi::SyncMessage::Start() => {
+        ::control::ControlMessage::Playback(playback_message) => match playback_message.sync {
+          ::control::SyncMessage::Start() => {
             // unmute all tracks
             for track in self.tracks.iter_mut() {
               track.play();
             }
             self.clock_ticks = 0;
           }
-          ::midi::SyncMessage::Stop() => {
+          ::control::SyncMessage::Stop() => {
             // mute all tracks
             for track in self.tracks.iter_mut() {
               track.stop();
             }
             self.clock_ticks = 0;
           }
-          ::midi::SyncMessage::Tick(_tick) => {
+          ::control::SyncMessage::Tick(_tick) => {
             // update tracks sync
             let global_tempo = playback_message.time.tempo;
             for track in self.tracks.iter_mut() {

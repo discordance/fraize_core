@@ -1,6 +1,8 @@
 mod midi;
 mod audio;
 mod sample_gen;
+mod control;
+mod config;
 
 fn main() {
     // ->
