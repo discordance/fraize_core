@@ -1,6 +1,7 @@
 extern crate bus;
 extern crate midir;
 extern crate time_calc;
+extern crate wmidi;
 
 use std::thread;
 
@@ -8,19 +9,22 @@ use self::bus::{Bus, BusReader};
 use self::midir::os::unix::VirtualInput;
 use self::midir::MidiInput;
 use self::time_calc::{Ppqn, Ticks};
+use self::wmidi::MidiMessage;
 
 use control::{ControlMessage, PlaybackMessage, SyncMessage};
 
 const PPQN: Ppqn = 24;
 
-// keeps time with midi and calculate useful values
+/// MidiTime keeps time with midi and calculate useful values
 #[derive(Clone)]
 pub struct MidiTime {
   pub tempo: f64,
   pub ticks: u64, // tick counter
   pub beats: f64,
   last_timecode: u64,
-} // implem
+}
+
+/// MidiTime implementation
 impl MidiTime {
   // restart midi time
   fn restart(&mut self) {
@@ -53,31 +57,64 @@ impl MidiTime {
   }
 }
 
-// midi sync callback,
+// midi callback in midi thread
 // passing the sender to send data back to the main midi thread
-fn midi_sync_cb(tcode: u64, mid_data: &[u8], tx: &mut Bus<SyncMessage>) {
-  match mid_data[0] {
-    242 => {
-      tx.broadcast(SyncMessage::Start());
-    }
-    252 => {
-      tx.broadcast(SyncMessage::Stop());
-    }
-    248 => {
-      tx.broadcast(SyncMessage::Tick(tcode));
-    }
-    _ => (), // nothing
-  }
-}
+fn midi_cb(tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>, MidiTime)) {
+  // destructure the tuple
+  let (tx, midi_time) = cb_data;
 
-// broadcast sync to audio tracks! 
-// @TODO its blocking <------ should be non block ?
-fn broadcast_sync(bus: &mut Bus<ControlMessage>, message: SyncMessage, time: MidiTime) {
-  // send to audio tracks
-  bus.broadcast(ControlMessage::Playback(PlaybackMessage {
-    sync: message,
-    time, // midi time
-  }));
+  // parse raw midi inito a usable message
+  let message = MidiMessage::from_bytes(mid_data);
+  match message {
+    Ok(mess) => {
+      match mess {
+        MidiMessage::NoteOff(_, _, _) => {},
+        MidiMessage::NoteOn(_, _, _) => {},
+        MidiMessage::PolyphonicKeyPressure(_, _, _) => {},
+        MidiMessage::ControlChange(_, _, _) => {},
+        MidiMessage::ProgramChange(_, _) => {},
+        MidiMessage::ChannelPressure(_, _) => {},
+        MidiMessage::PitchBendChange(_, _) => {},
+        MidiMessage::SysEx(_) => {},
+        MidiMessage::MidiTimeCode(_) => {},
+        MidiMessage::SongPositionPointer(_) => {},
+        MidiMessage::SongSelect(_) => {},
+        MidiMessage::Reserved(_) => {},
+        MidiMessage::TuneRequest => {},
+        // clock ticks
+        MidiMessage::TimingClock => {
+          midi_time.tick(tcode);
+          let message = SyncMessage::Tick(tcode);
+          tx.broadcast(::control::ControlMessage::Playback(PlaybackMessage{
+            sync:message,
+            time: midi_time.clone()
+          }));
+        },
+        // clock start
+        MidiMessage::Start => {
+          midi_time.restart();
+          let message = SyncMessage::Start();
+          tx.broadcast(::control::ControlMessage::Playback(PlaybackMessage{
+            sync:message,
+            time: midi_time.clone()
+          }));
+        },
+        MidiMessage::Continue => {},
+        // clock stop
+        MidiMessage::Stop => {
+          midi_time.restart();
+          let message = SyncMessage::Stop();
+          tx.broadcast(::control::ControlMessage::Playback(PlaybackMessage{
+            sync:message,
+            time: midi_time.clone()
+          }));
+        },
+        MidiMessage::ActiveSensing => {},
+        MidiMessage::Reset => {},
+      }
+    },
+    Err(_) => {}, // do nothing
+  }
 }
 
 // initialize midi machinery
@@ -101,48 +138,29 @@ pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<ControlMessage>
       last_timecode: 0,
     };
 
-    // open midi input
-    let input = MidiInput::new("Smplr").expect("midi: Couldn't open midi input");
-
-    // take first port
-    // let port_name = input.port_name(0).expect("Couldn't get midi port");
-
-    // open connection on virtual port
-    let _connection = input
-      .create_virtual("midi: Rust Smplr Input", midi_sync_cb, inner_bus)
-      .expect("midi: Couldn't open connection");
-
     // ->
     println!("midi: Listen to midi on port: {}", "Rust Smplr Input");
     println!("midi: Initial Tempo: {}", midi_time.tempo);
 
+    // open midi input
+    let mut input = MidiInput::new("Smplr").expect("midi: Couldn't open midi input");
+
+    // we need to move a lot of stuff in our midi
+    let mut data_tup = (inner_bus, midi_time);
+    // take first port
+    // let port_name = input.port_name(0).expect("Couldn't get midi port");
+
+    // open connection on virtual port (for Ableton or any host)
+    let _connection = input
+      // moving data in the callback: inner_bus and midi_time
+      .create_virtual("Rust Smplr Input", midi_cb, data_tup)
+      .expect("midi: Couldn't open connection");
+
     // infinite loop in this thread, blocked by channel receiver
-    // @TODO refactor in own function 
     loop {
       // receive form channel
       let message = inner_rx.recv().unwrap();
-      match message {
-        // start received
-        SyncMessage::Start() => {
-          println!("midi: start");
-          midi_time.restart();
-          // send to audio tracks
-          broadcast_sync(&mut control_bus, message, midi_time.clone());
-        }
-        // stop received
-        SyncMessage::Stop() => {
-          println!("midi: stop");
-          midi_time.restart();
-          // send to audio tracks
-          broadcast_sync(&mut control_bus, message, midi_time.clone());
-        }
-        // tick received
-        SyncMessage::Tick(tcode) => {
-          midi_time.tick(tcode);
-          // send to audio tracks
-          broadcast_sync(&mut control_bus, message, midi_time.clone());
-        }
-      }
+      control_bus.broadcast(message);
     }
   });
 
