@@ -19,6 +19,8 @@ struct AudioTrack {
   /// As we are using cpal, we dont know yet how to size it at init.
   /// A first audio round is necessary to get the size
   audio_buffer: Vec<Stereo<f32>>,
+  /// Gain is the gain value of the track, pre effects
+  gain: f32
 }
 
 /// AudioTrack implementation.
@@ -30,6 +32,7 @@ impl AudioTrack {
       // we still dont know how much the buffer wants.
       // let's init at 512 and extend later.
       audio_buffer: Vec::with_capacity(512),
+      gain: 1.0
     }
   }
 
@@ -131,12 +134,18 @@ impl AudioMixer {
       track.fill_next_block(buff_size);
     }
 
-    // mix!
+    // MIX!
     for (i, frame_out) in block_out.iter_mut().enumerate() {
       // 64 bit mixer
       let mut acc = Stereo::<f64>::equilibrium();
       for track in self.tracks.iter_mut() {
-        let frame = track.get_frame(i);
+
+        let mut frame = track.get_frame(i);
+
+        // gain stage
+        frame = frame.scale_amp(track.gain);
+
+        // mix stage
         acc[0] += frame[0] as f64;
         acc[1] += frame[1] as f64;
       }
@@ -151,6 +160,21 @@ impl AudioMixer {
   fn fetch_commands(&mut self) {
     match self.command_rx.try_recv() {
       Ok(command) => match command {
+        // Gain
+        ::control::ControlMessage::TrackGain{tcode,  val, track_num} => {
+//          println!("{} {} {}", tcode, val, track_num);
+          // check if tracknum is around
+          let tr = self.tracks.get_mut(track_num);
+          match tr {
+            Some(t) => {
+              // set the gain (max 1.2)
+              t.gain = 1.25 * val;
+            }
+            _ => ()
+          }
+
+        }
+        // Playback management
         ::control::ControlMessage::Playback(playback_message) => match playback_message.sync {
           ::control::SyncMessage::Start() => {
             // unmute all tracks

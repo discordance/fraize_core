@@ -1,15 +1,23 @@
 extern crate bus;
+extern crate serde;
+
+use serde::{Deserialize};
 use self::bus::{Bus};
 
+
 /// ControlMessage Enum is the main message for the control bus
-#[derive(Clone)]
+#[derive(Clone, Debug, Deserialize)]
 pub enum ControlMessage {
   /// Playback message that is always dispatched globally (for all tracks, effects, ui)
   Playback(PlaybackMessage),
+
+  /// Track Gain
+  /// timecode, track_num, gain
+  TrackGain{ tcode: u64, val: f32, track_num: usize }
 }
 
 /// PlaybackMessage have all data used for sync
-#[derive(Clone)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct PlaybackMessage {
   pub sync: SyncMessage,
   // @TODO should be more generic struct for time
@@ -17,7 +25,7 @@ pub struct PlaybackMessage {
 }
 
 /// Clock sync message
-#[derive(Clone)]
+#[derive(Clone, Debug, Deserialize)]
 pub enum SyncMessage {
   Start(),
   Stop(),

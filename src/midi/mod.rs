@@ -2,21 +2,25 @@ extern crate bus;
 extern crate midir;
 extern crate time_calc;
 extern crate wmidi;
+extern crate serde;
 
 use std::thread;
+use serde::{Deserialize};
 
 use self::bus::{Bus, BusReader};
 use self::midir::os::unix::VirtualInput;
 use self::midir::MidiInput;
 use self::time_calc::{Ppqn, Ticks};
-use self::wmidi::MidiMessage;
+use self::wmidi::{MidiMessage, Channel};
+
 
 use control::{ControlMessage, PlaybackMessage, SyncMessage};
+use config::{Config};
 
 const PPQN: Ppqn = 24;
 
 /// MidiTime keeps time with midi and calculate useful values
-#[derive(Clone)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct MidiTime {
   pub tempo: f64,
   pub ticks: u64, // tick counter
@@ -59,9 +63,9 @@ impl MidiTime {
 
 // midi callback in midi thread
 // passing the sender to send data back to the main midi thread
-fn midi_cb(tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>, MidiTime)) {
+fn midi_cb(midi_tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>, MidiTime, Config)) {
   // destructure the tuple
-  let (tx, midi_time) = cb_data;
+  let (tx, midi_time, conf) = cb_data;
 
   // parse raw midi inito a usable message
   let message = MidiMessage::from_bytes(mid_data);
@@ -71,7 +75,33 @@ fn midi_cb(tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>, Midi
         MidiMessage::NoteOff(_, _, _) => {},
         MidiMessage::NoteOn(_, _, _) => {},
         MidiMessage::PolyphonicKeyPressure(_, _, _) => {},
-        MidiMessage::ControlChange(_, _, _) => {},
+        MidiMessage::ControlChange(chan, cc_num, val) => {
+          // floatify the val
+          let val_f = val as f32 / 128.0;
+
+          // parse midi channel and cc num to string for hashmap
+          let midi_chan_str = chan.number().to_string();
+          let cc_num_str = cc_num.to_string();
+
+          // check if it exists
+          // @TODO use some pattern matching + Option ??
+          if conf.midi_map.cc.contains_key(&midi_chan_str) {
+            // check if it contains the control
+            if conf.midi_map.cc[&midi_chan_str].contains_key(&cc_num_str) {
+              // clone the CommandMessage
+              let mut message = conf.midi_map.cc[&midi_chan_str][&cc_num_str].clone();
+              // fill in good values and broadcast
+              match message {
+                ControlMessage::Playback(_) => {},
+                ControlMessage::TrackGain { tcode, val, track_num } => {
+                  // broadcast
+                  let m = ControlMessage::TrackGain { tcode: midi_tcode, val: val_f, track_num };
+                  tx.broadcast(m);
+                },
+              }
+            }
+          }
+        },
         MidiMessage::ProgramChange(_, _) => {},
         MidiMessage::ChannelPressure(_, _) => {},
         MidiMessage::PitchBendChange(_, _) => {},
@@ -83,8 +113,8 @@ fn midi_cb(tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>, Midi
         MidiMessage::TuneRequest => {},
         // clock ticks
         MidiMessage::TimingClock => {
-          midi_time.tick(tcode);
-          let message = SyncMessage::Tick(tcode);
+          midi_time.tick(midi_tcode);
+          let message = SyncMessage::Tick(midi_tcode);
           tx.broadcast(::control::ControlMessage::Playback(PlaybackMessage{
             sync:message,
             time: midi_time.clone()
@@ -118,7 +148,7 @@ fn midi_cb(tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>, Midi
 }
 
 // initialize midi machinery
-pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<ControlMessage>) {
+pub fn initialize_inputs(conf: Config) -> (thread::JoinHandle<()>, BusReader<ControlMessage>) {
   // init the control bus
   let mut control_bus = ::control::initialize_control();
   // bus channel to communicate from the midi callback to audio tracks
@@ -126,12 +156,12 @@ pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<ControlMessage>
 
   // initialize in its own thread
   let midi_thread = thread::spawn(move || {
-    // bus channel to communicate from the midi callback to this thread
+    // bus channel to communicate from the midi callback to this thread safely
     let mut inner_bus = Bus::new(1);
     let mut inner_rx = inner_bus.add_rx();
 
     // mutable midi time
-    let mut midi_time = MidiTime {
+    let midi_time = MidiTime {
       tempo: 120.0,
       ticks: 0,
       beats: 0.0,
@@ -143,10 +173,10 @@ pub fn initialize_inputs() -> (thread::JoinHandle<()>, BusReader<ControlMessage>
     println!("midi: Initial Tempo: {}", midi_time.tempo);
 
     // open midi input
-    let mut input = MidiInput::new("Smplr").expect("midi: Couldn't open midi input");
+    let input = MidiInput::new("Smplr").expect("midi: Couldn't open midi input");
 
     // we need to move a lot of stuff in our midi
-    let mut data_tup = (inner_bus, midi_time);
+    let data_tup = (inner_bus, midi_time, conf);
     // take first port
     // let port_name = input.port_name(0).expect("Couldn't get midi port");
 

@@ -1,3 +1,5 @@
+#[macro_use] extern crate serde;
+
 mod midi;
 mod audio;
 mod sample_gen;
@@ -8,8 +10,11 @@ fn main() {
     // ->
     println!("Hello Sampler");
 
+    // load default config, immutable
+    let conf = config::load_default();
+
     // init midi inputs
-    let (midi_thread, midi_rx) = midi::initialize_inputs();
+    let (midi_thread, midi_rx) = midi::initialize_inputs(conf.clone());
 
     // init audio
     audio::initialize_audio(midi_rx);

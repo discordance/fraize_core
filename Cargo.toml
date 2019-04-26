@@ -13,6 +13,10 @@ sample = "0.10.0"
 num = "0.1.28"
 elapsed = "0.1"
 wmidi = "1.1.0"
+toml = "0.5.0"
+serde = { version = "1.0.90", features = ["derive"] }
+
+
 
 [dependencies.cpal]
 # modified cpal
