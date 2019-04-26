@@ -3,7 +3,9 @@ extern crate midir;
 extern crate time_calc;
 extern crate wmidi;
 extern crate serde;
+extern crate time;
 
+use self::time::PreciseTime;
 use std::thread;
 use serde::{Deserialize};
 
@@ -64,6 +66,7 @@ impl MidiTime {
 // midi callback in midi thread
 // passing the sender to send data back to the main midi thread
 fn midi_cb(midi_tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>, MidiTime, Config)) {
+//  let start = PreciseTime::now();
   // destructure the tuple
   let (tx, midi_time, conf) = cb_data;
 
@@ -96,7 +99,11 @@ fn midi_cb(midi_tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>,
                 ControlMessage::TrackGain { tcode, val, track_num } => {
                   // broadcast
                   let m = ControlMessage::TrackGain { tcode: midi_tcode, val: val_f, track_num };
-                  tx.broadcast(m);
+                  let res = tx.try_broadcast(m);
+                  match res{
+                    Ok(_) => {},
+                    Err(e) => {println!("missed ctrl message in inner {:?}",e)},
+                  }
                 },
               }
             }
@@ -145,6 +152,8 @@ fn midi_cb(midi_tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>,
     },
     Err(_) => {}, // do nothing
   }
+//  let end = PreciseTime::now();
+//  println!("{} seconds loop midi LOOP CB .", start.to(end));
 }
 
 // initialize midi machinery
@@ -157,7 +166,7 @@ pub fn initialize_inputs(conf: Config) -> (thread::JoinHandle<()>, BusReader<Con
   // initialize in its own thread
   let midi_thread = thread::spawn(move || {
     // bus channel to communicate from the midi callback to this thread safely
-    let mut inner_bus = Bus::new(1);
+    let mut inner_bus = Bus::new(128);
     let mut inner_rx = inner_bus.add_rx();
 
     // mutable midi time
@@ -190,7 +199,14 @@ pub fn initialize_inputs(conf: Config) -> (thread::JoinHandle<()>, BusReader<Con
     loop {
       // receive form channel
       let message = inner_rx.recv().unwrap();
-      control_bus.broadcast(message);
+
+      let res = control_bus.try_broadcast(message);
+      match res{
+        Ok(_) => {},
+        Err(e) => {
+          println!("missed in control bus {:?}", e);
+        },
+      }
     }
   });
 

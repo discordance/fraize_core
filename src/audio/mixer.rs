@@ -156,52 +156,57 @@ impl AudioMixer {
     }
   }
 
-  /// Reads commands from the bus
+  /// Reads commands from the bus.
+  /// Must iterate to consume all messages at one buffer cycle.
   fn fetch_commands(&mut self) {
-    match self.command_rx.try_recv() {
-      Ok(command) => match command {
-        // Gain
-        ::control::ControlMessage::TrackGain{tcode,  val, track_num} => {
+    loop {
+      match self.command_rx.try_recv() {
+        // we have a message
+        Ok(command) => match command {
+          // Gain
+          ::control::ControlMessage::TrackGain{tcode,  val, track_num} => {
 //          println!("{} {} {}", tcode, val, track_num);
-          // check if tracknum is around
-          let tr = self.tracks.get_mut(track_num);
-          match tr {
-            Some(t) => {
-              // set the gain (max 1.2)
-              t.gain = 1.25 * val;
+            // check if tracknum is around
+            let tr = self.tracks.get_mut(track_num);
+            match tr {
+              Some(t) => {
+                // set the gain (max 1.2)
+                t.gain = val * 1.2;
+              }
+              _ => ()
             }
-            _ => ()
-          }
 
-        }
-        // Playback management
-        ::control::ControlMessage::Playback(playback_message) => match playback_message.sync {
-          ::control::SyncMessage::Start() => {
-            // unmute all tracks
-            for track in self.tracks.iter_mut() {
-              track.play();
-            }
-            self.clock_ticks = 0;
           }
-          ::control::SyncMessage::Stop() => {
-            // mute all tracks
-            for track in self.tracks.iter_mut() {
-              track.stop();
+          // Playback management
+          ::control::ControlMessage::Playback(playback_message) => match playback_message.sync {
+            ::control::SyncMessage::Start() => {
+              // unmute all tracks
+              for track in self.tracks.iter_mut() {
+                track.play();
+              }
+              self.clock_ticks = 0;
             }
-            self.clock_ticks = 0;
-          }
-          ::control::SyncMessage::Tick(_tick) => {
-            // update tracks sync
-            let global_tempo = playback_message.time.tempo;
-            for track in self.tracks.iter_mut() {
-              track.sync(global_tempo as u64, self.clock_ticks);
+            ::control::SyncMessage::Stop() => {
+              // mute all tracks
+              for track in self.tracks.iter_mut() {
+                track.stop();
+              }
+              self.clock_ticks = 0;
             }
-            // inc ticks received by the mixer
-            self.clock_ticks += 1;
-          }
+            ::control::SyncMessage::Tick(_tick) => {
+              // update tracks sync
+              let global_tempo = playback_message.time.tempo;
+              for track in self.tracks.iter_mut() {
+                track.sync(global_tempo as u64, self.clock_ticks);
+              }
+              // inc ticks received by the mixer
+              self.clock_ticks += 1;
+            }
+          },
         },
-      },
-      _ => (),
-    };
+        // its empty
+        _ => return,
+      };
+    } // loop
   }
 }

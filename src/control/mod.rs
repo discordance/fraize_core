@@ -1,8 +1,10 @@
 extern crate bus;
 extern crate serde;
 
+use std::mem;
 use serde::{Deserialize};
 use self::bus::{Bus};
+
 
 
 /// ControlMessage Enum is the main message for the control bus
@@ -35,5 +37,6 @@ pub enum SyncMessage {
 /// Initialize the control bus
 /// Returns a writable ControlMessageBus
 pub fn initialize_control() -> Bus<ControlMessage> {
- return Bus::new(6);
+  println!("Size of a Control Message {:?} bytes", mem::size_of::<ControlMessage>());
+ return Bus::new(1024);
 }
