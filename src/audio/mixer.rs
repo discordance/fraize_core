@@ -11,6 +11,43 @@ use sample_gen::slicer::SlicerGen;
 use sample_gen::pvoc::PVOCGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 
+/// SmoothParam is an helper for parametter smoothing
+struct SmoothParam {
+  /// keep track of old value
+  prev_val: f32,
+  /// keep track of next value
+  next_val: f32,
+  /// memorize the ramp
+  t: usize,
+}
+
+impl SmoothParam {
+
+  /// constructor
+  fn new() -> Self {
+    return SmoothParam{prev_val:0.0, next_val:1.0, t: 0}
+  }
+
+  /// set next value
+  fn new_value(&mut self, v: f32) {
+    self.prev_val = self.next_val;
+    self.next_val = v;
+    // reset t
+    self.t = 0;
+  }
+
+  /// lin interp between previous and next value, keeping ramp state
+  fn get_param(&mut self, len: usize) -> f32 {
+    let rt = self.t as f32/len as f32;
+    let smoothed = (1.0 - rt) * self.prev_val + rt * self.next_val;
+    // inc the time if the buffer isnt complete
+    if self.t < len {
+      self.t += 1;
+    }
+    return smoothed;
+  }
+}
+
 /// AudioTrack is a AudioMixer track that embeds one sample generator and a chain of effects.
 struct AudioTrack {
   /// The attached sample generator.
@@ -20,7 +57,7 @@ struct AudioTrack {
   /// A first audio round is necessary to get the size
   audio_buffer: Vec<Stereo<f32>>,
   /// Gain is the gain value of the track, pre effects
-  gain: f32
+  gain: SmoothParam
 }
 
 /// AudioTrack implementation.
@@ -32,7 +69,7 @@ impl AudioTrack {
       // we still dont know how much the buffer wants.
       // let's init at 512 and extend later.
       audio_buffer: Vec::with_capacity(512),
-      gain: 1.0
+      gain: SmoothParam::new()
     }
   }
 
@@ -143,7 +180,7 @@ impl AudioMixer {
         let mut frame = track.get_frame(i);
 
         // gain stage
-        frame = frame.scale_amp(track.gain);
+        frame = frame.scale_amp(track.gain.get_param(buff_size));
 
         // mix stage
         acc[0] += frame[0] as f64;
@@ -171,7 +208,7 @@ impl AudioMixer {
             match tr {
               Some(t) => {
                 // set the gain (max 1.2)
-                t.gain = val * 1.2;
+                t.gain.new_value(val * 1.2);
               }
               _ => ()
             }
