@@ -100,11 +100,20 @@ fn midi_cb(midi_tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>,
                   // broadcast
                   let m = ControlMessage::TrackGain { tcode: midi_tcode, val: val_f, track_num };
                   let res = tx.try_broadcast(m);
-                  match res{
-                    Ok(_) => {},
-                    Err(e) => {println!("missed ctrl message in inner {:?}",e)},
-                  }
+//                  match res{
+//                    Ok(_) => {},
+//                    Err(e) => {println!("missed ctrl message in inner {:?}",e)},
+//                  }
                 },
+                ControlMessage::TrackPan {tcode, val, track_num} => {
+                  // broadcast
+                  let m = ControlMessage::TrackPan { tcode: midi_tcode, val: val_f, track_num };
+                  let res = tx.try_broadcast(m);
+//                  match res{
+//                    Ok(_) => {},
+//                    Err(e) => {println!("missed ctrl message in inner {:?}",e)},
+//                  }
+                }
               }
             }
           }

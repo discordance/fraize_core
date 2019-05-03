@@ -14,8 +14,9 @@ pub enum ControlMessage {
   Playback(PlaybackMessage),
 
   /// Track Gain
-  /// timecode, track_num, gain
-  TrackGain{ tcode: u64, val: f32, track_num: usize }
+  TrackGain{ tcode: u64, val: f32, track_num: usize },
+  /// Track Pan
+  TrackPan{ tcode: u64, val: f32, track_num: usize }
 }
 
 /// PlaybackMessage have all data used for sync

@@ -3,9 +3,11 @@
 [midi_map.cc.1]
 # midi cc 7 on channel 1 is assigned to a TrackGain control, for track 0
 7 = { TrackGain = { tcode = 0, val = 0.0, track_num = 0 } }
+10 = { TrackPan = { tcode = 0, val = 0.5, track_num = 0 } }
 # MIDI MAP CC on CHANNEL 2
 [midi_map.cc.2]
-# midi cc 7 on channel 1 is assigned to a TrackGain control, for track 0
+# midi cc 7 on channel 2 is assigned to a TrackGain control, for track 1
 7 = { TrackGain = { tcode = 0, val = 0.0, track_num = 1 } }
+10 = { TrackPan = { tcode = 0, val = 0.5, track_num = 1 } }
 
 

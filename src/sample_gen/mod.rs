@@ -31,8 +31,7 @@ use std::collections::HashMap;
 pub const PPQN: Ppqn = 24;
 
 /// how many sample to fade in / out to avoid clicks when resync audio
-//const NOCLICK_FADE_LENGTH: u64 = 128;
-const NOCLICK_FADE_LENGTH: u64 = 64;
+const NOCLICK_FADE_LENGTH: u64 = 128;
 
 /// SliceMode defines how the slices are cut in a smart buffer.
 /// Can be OnsetDetection or fixed BAR divisions.

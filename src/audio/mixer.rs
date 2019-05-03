@@ -11,7 +11,8 @@ use sample_gen::slicer::SlicerGen;
 use sample_gen::pvoc::PVOCGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 
-/// SmoothParam is an helper for parametter smoothing
+/// SmoothParam is an helper for parameter smoothing
+/// @TODO should be out of here
 struct SmoothParam {
   /// keep track of old value
   prev_val: f32,
@@ -24,8 +25,15 @@ struct SmoothParam {
 impl SmoothParam {
 
   /// constructor
-  fn new() -> Self {
-    return SmoothParam{prev_val:0.0, next_val:1.0, t: 0}
+  fn new(pv: f32, nv: f32) -> Self {
+    return SmoothParam{prev_val:pv, next_val:nv, t: 0}
+  }
+
+  /// set the next value but scaled
+  fn new_value_scaled(&mut self, v: f32, new_start: f32, new_end: f32) {
+    // scale
+    let nv = new_start + (new_end - new_start) * ((v - 0.0) / (1.0 - 0.0));
+    self.new_value(nv);
   }
 
   /// set next value
@@ -56,8 +64,10 @@ struct AudioTrack {
   /// As we are using cpal, we dont know yet how to size it at init.
   /// A first audio round is necessary to get the size
   audio_buffer: Vec<Stereo<f32>>,
-  /// Gain is the gain value of the track, pre effects
-  gain: SmoothParam
+  /// Gain is the gain value of the track, pre effects, smoothed
+  gain: SmoothParam,
+  /// Pan is the panning value of the track, pre effects, smoothed
+  pan: SmoothParam
 }
 
 /// AudioTrack implementation.
@@ -69,7 +79,8 @@ impl AudioTrack {
       // we still dont know how much the buffer wants.
       // let's init at 512 and extend later.
       audio_buffer: Vec::with_capacity(512),
-      gain: SmoothParam::new()
+      gain: SmoothParam::new(0.0, 1.0),
+      pan: SmoothParam::new(0.0, 0.0)
     }
   }
 
@@ -202,13 +213,26 @@ impl AudioMixer {
         Ok(command) => match command {
           // Gain
           ::control::ControlMessage::TrackGain{tcode,  val, track_num} => {
-//          println!("{} {} {}", tcode, val, track_num);
             // check if tracknum is around
             let tr = self.tracks.get_mut(track_num);
             match tr {
               Some(t) => {
                 // set the gain (max 1.2)
                 t.gain.new_value(val * 1.2);
+              }
+              _ => ()
+            }
+
+          }
+          // Gain
+          ::control::ControlMessage::TrackPan{tcode,  val, track_num} => {
+            // check if tracknum is around
+            let tr = self.tracks.get_mut(track_num);
+            match tr {
+              Some(t) => {
+                // set the gain (max 1.2)
+                t.pan.new_value_scaled(val, -1.0, 1.0);
+                println!("pan pan culcul: {}", t.pan.next_val);
               }
               _ => ()
             }
