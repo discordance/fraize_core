@@ -1,10 +1,12 @@
 #[macro_use] extern crate serde;
+extern crate hound;
 
 mod midi;
 mod audio;
 mod sample_gen;
 mod control;
 mod config;
+mod sampling;
 
 fn main() {
     // ->

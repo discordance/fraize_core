@@ -33,7 +33,7 @@ fn parse_filepath_beats(path: &str) -> Result<u64, &str> {
     Some(last) => {
       match last.parse::<u64>() {
         Ok(b) => return Ok(b),
-        Err(err) => return Err("ParseIntError"),
+        Err(_err) => return Err("ParseIntError"),
       };
     }
     None => return Err("NoBeatNum"),

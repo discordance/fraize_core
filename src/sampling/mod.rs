@@ -1,0 +1,97 @@
+use sample_gen::SmartBuffer;
+use std::fs;
+use std::error::Error;
+
+const AUDIO_ROOT: &str = "/Users/nunja/Documents/Audiolib/smplr";
+
+/// SampleLib Manage samples loading and analytics
+pub struct SampleLib
+{
+  /// In-Memory SmartBuffer Store.
+  /// SampleLib is organized in banks.
+  buffers: Vec<Vec<SmartBuffer>>
+}
+
+impl SampleLib {
+  /// Gets the first sample of the bank, returns Empty
+  pub fn get_first_sample(&self, bank: usize) -> SmartBuffer {
+    let b = match self.buffers.get(bank) {
+      Some(x) => {
+        // take the first
+        let first = match x.first() {
+          Some(x) => {
+            let c = x;
+            return c.clone();
+          }
+          None => return SmartBuffer::new_empty(),
+        };
+      }
+      None => return SmartBuffer::new_empty(),
+    };
+  }
+}
+
+/// init the SampleLib, loads the samples
+pub fn init_lib() -> Result<SampleLib, Box<Error>> {
+  // init lib
+  let mut lib = SampleLib {
+    buffers: Vec::new()
+  };
+
+  // directory walk
+  let paths = fs::read_dir(AUDIO_ROOT)?;
+
+  for bank_path in paths {
+    // somewhat ugly
+    let b = bank_path?;
+    let bank_name = b.file_name();
+    let ftype = b.file_type()?;
+
+    match bank_name.to_str().unwrap() {
+      // our junk filter
+      ".DS_Store" => {}
+      _ => {
+        // is it a directory ?
+        if ftype.is_dir() {
+          let mut buffs = Vec::<SmartBuffer>::new();
+          // read the samples
+          let audio_paths = fs::read_dir(b.path())?;
+
+          for file_path in audio_paths {
+            let f = file_path?;
+            let file_name = f.file_name();
+            let ftype = f.file_type()?;
+
+            // filter out crap
+            match file_name.to_str().unwrap() {
+              // our junk filter
+              ".DS_Store" => {}
+              _ => {
+                // load file as smart buffer
+                if !ftype.is_dir() {
+                  // load smart buffer
+                  let mut buffer = SmartBuffer::new_empty();
+                  let fpath = f.path();
+                  let fpath = fpath.to_str().unwrap(); // NoneError doesnt not implem Boxed Error
+                  // sets name
+                  buffer.file_name = String::from(file_name.to_str().unwrap());
+                  buffer.load_wave(fpath);
+
+                  // push
+                  buffs.push(buffer);
+                }
+              }
+            }
+          }
+          // finally push in lib
+          lib.buffers.push(buffs);
+        }
+      }
+    }
+//
+  }
+
+  // yeah
+  Ok(lib)
+}
+

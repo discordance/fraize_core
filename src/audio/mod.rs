@@ -15,7 +15,7 @@ use self::sample::ToFrameSliceMut;
 // initialize audio machinery
 pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
 
-  // test some mixer 
+  // init mixer
   let mut mixer = mixer::AudioMixer::new_test(midi_rx);
 
   // init audio with CPAL !
@@ -61,7 +61,7 @@ pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
       StreamData::Output {
         buffer: UnknownTypeOutputBuffer::F32(mut buffer),
       } => {
-        
+
         // here we implement the trait sample::ToFrameSliceMut;
         // we can take a mutable buffer from the audio callback, but framed in stereo !!
         let buffer: &mut [Stereo<f32>] = buffer.to_frame_slice_mut().unwrap();

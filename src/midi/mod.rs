@@ -5,7 +5,6 @@ extern crate wmidi;
 extern crate serde;
 extern crate time;
 
-use self::time::PreciseTime;
 use std::thread;
 use serde::{Deserialize};
 
@@ -13,7 +12,7 @@ use self::bus::{Bus, BusReader};
 use self::midir::os::unix::VirtualInput;
 use self::midir::MidiInput;
 use self::time_calc::{Ppqn, Ticks};
-use self::wmidi::{MidiMessage, Channel};
+use self::wmidi::{MidiMessage};
 
 
 use control::{ControlMessage, PlaybackMessage, SyncMessage};
@@ -66,7 +65,6 @@ impl MidiTime {
 // midi callback in midi thread
 // passing the sender to send data back to the main midi thread
 fn midi_cb(midi_tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>, MidiTime, Config)) {
-//  let start = PreciseTime::now();
   // destructure the tuple
   let (tx, midi_time, conf) = cb_data;
 
@@ -96,19 +94,19 @@ fn midi_cb(midi_tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>,
               // fill in good values and broadcast
               match message {
                 ControlMessage::Playback(_) => {},
-                ControlMessage::TrackGain { tcode, val, track_num } => {
+                ControlMessage::TrackGain { tcode: _, val: _, track_num } => {
                   // broadcast
                   let m = ControlMessage::TrackGain { tcode: midi_tcode, val: val_f, track_num };
-                  let res = tx.try_broadcast(m);
+                  let _res = tx.try_broadcast(m);
 //                  match res{
 //                    Ok(_) => {},
 //                    Err(e) => {println!("missed ctrl message in inner {:?}",e)},
 //                  }
                 },
-                ControlMessage::TrackPan {tcode, val, track_num} => {
+                ControlMessage::TrackPan {tcode:_, val:_, track_num} => {
                   // broadcast
                   let m = ControlMessage::TrackPan { tcode: midi_tcode, val: val_f, track_num };
-                  let res = tx.try_broadcast(m);
+                  let _res = tx.try_broadcast(m);
 //                  match res{
 //                    Ok(_) => {},
 //                    Err(e) => {println!("missed ctrl message in inner {:?}",e)},
@@ -161,7 +159,6 @@ fn midi_cb(midi_tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>,
     },
     Err(_) => {}, // do nothing
   }
-//  let end = PreciseTime::now();
 //  println!("{} seconds loop midi LOOP CB .", start.to(end));
 }
 

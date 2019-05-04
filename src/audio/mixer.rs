@@ -10,6 +10,7 @@ use sample_gen::repitch::RePitchGen;
 use sample_gen::slicer::SlicerGen;
 use sample_gen::pvoc::PVOCGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
+use sampling::SampleLib;
 
 /// SmoothParam is an helper for parameter smoothing
 /// @TODO should be out of here
@@ -67,21 +68,30 @@ struct AudioTrack {
   /// Gain is the gain value of the track, pre effects, smoothed
   gain: SmoothParam,
   /// Pan is the panning value of the track, pre effects, smoothed
-  pan: SmoothParam
+  pan: SmoothParam,
+  /// Bank index (track-locked)
+  bank: usize
 }
 
 /// AudioTrack implementation.
 impl AudioTrack {
   /// new init the track from a sample generator
-  fn new(generator: Box<SampleGenerator + 'static + Send>) -> Self {
+  fn new(generator: Box<SampleGenerator + 'static + Send>, bank: usize) -> Self {
     AudioTrack {
       generator,
       // we still dont know how much the buffer wants.
       // let's init at 512 and extend later.
       audio_buffer: Vec::with_capacity(512),
       gain: SmoothParam::new(0.0, 1.0),
-      pan: SmoothParam::new(0.0, 0.0)
+      pan: SmoothParam::new(0.0, 0.0),
+      bank,
     }
+  }
+
+  /// loads (moves) a new smart_buffer in the gen
+  fn load_buffer(&mut self, buffer: SmartBuffer) {
+    println!("Loading smart buffer: {}", buffer.file_name);
+    self.generator.load_buffer(buffer);
   }
 
   /// play the underlying sample gen
@@ -123,6 +133,8 @@ impl AudioTrack {
 /// AudioMixer manage and mixes many AudioTrack.
 /// Also take care of the control events routing.
 pub struct AudioMixer {
+  /// SampleLib, owned by the mixer
+  sample_lib: SampleLib,
   /// Tracks owned by the mixer.
   tracks: Vec<AudioTrack>,
   /// Clock ticks
@@ -135,25 +147,24 @@ pub struct AudioMixer {
 impl AudioMixer {
   /// for testing only
   pub fn new_test(command_rx: BusReader<::control::ControlMessage>) -> Self {
-    // load two samples
-    let mut s1 = SmartBuffer::new_empty();
-    let mut s2 = SmartBuffer::new_empty();
 
-    // check errors
-    // @TODO and error checking ?
-    s1.load_wave("/Users/nunja/Documents/Audiolib/smplr/loop_8.wav");
-    s2.load_wave("/Users/nunja/Documents/Audiolib/smplr/tech_16.wav");
+    // init the sample lib, crash of err
+    let sample_lib = ::sampling::init_lib().expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT ?");
 
     // create two gens
     let mut gen1 = PVOCGen::new();
-    gen1.load_buffer(s1);
     let mut gen2 = RePitchGen::new();
-    gen2.load_buffer(s2);
 
     // create two tracks
     let mut tracks = Vec::new();
-    let track1 = AudioTrack::new(Box::new(gen1));
-    let track2 = AudioTrack::new(Box::new(gen2));
+    let mut track1 = AudioTrack::new(Box::new(gen1), 0);
+    let mut track2 = AudioTrack::new(Box::new(gen2), 1);
+
+    // load defaults
+    track1.load_buffer(sample_lib.get_first_sample(0));
+    track2.load_buffer(sample_lib.get_first_sample(1));
+
+    // some some defaults
     tracks.push(track1);
     tracks.push(track2);
 
@@ -161,6 +172,7 @@ impl AudioMixer {
       tracks,
       command_rx,
       clock_ticks: 0,
+      sample_lib,
     }
   }
 
@@ -212,7 +224,7 @@ impl AudioMixer {
         // we have a message
         Ok(command) => match command {
           // Gain
-          ::control::ControlMessage::TrackGain{tcode,  val, track_num} => {
+          ::control::ControlMessage::TrackGain{tcode: _,  val, track_num} => {
             // check if tracknum is around
             let tr = self.tracks.get_mut(track_num);
             match tr {
@@ -225,7 +237,7 @@ impl AudioMixer {
 
           }
           // Gain
-          ::control::ControlMessage::TrackPan{tcode,  val, track_num} => {
+          ::control::ControlMessage::TrackPan{tcode: _,  val, track_num} => {
             // check if tracknum is around
             let tr = self.tracks.get_mut(track_num);
             match tr {

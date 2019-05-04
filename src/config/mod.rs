@@ -31,7 +31,7 @@ pub fn load_default() -> Config {
 
   // load rson file
   let mut input = String::new();
-  let f = File::open(&input_path).expect("Failed opening file").read_to_string(&mut input);
+  let _f = File::open(&input_path).expect("Failed opening file").read_to_string(&mut input);
 
   let config: Config = match from_str(&input) {
     Ok(x) => x,

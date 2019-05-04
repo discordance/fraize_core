@@ -35,7 +35,7 @@ const NOCLICK_FADE_LENGTH: u64 = 128;
 
 /// SliceMode defines how the slices are cut in a smart buffer.
 /// Can be OnsetDetection or fixed BAR divisions.
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SliceMode {
   /// Natural detected onsets.
   OnsetMode(),
@@ -50,7 +50,10 @@ pub enum SliceMode {
 }
 
 /// Basically an audio buffer (in frame format) with some metadata from analysis.
+#[derive(Clone)]
 pub struct SmartBuffer {
+  /// Keeps track of the audio file name.
+  pub file_name: String,
   /// Samples in Stereo / float32 format. Use the `sample` Crate for convenience methods.
   /// We only support this format for the moment.
   /// @TODO implement as Generic ?
@@ -70,6 +73,7 @@ impl SmartBuffer {
   pub fn new_empty() -> Self {
     SmartBuffer {
       frames: Vec::new(),
+      file_name: String::from("empty"),
       original_tempo: 120.0,
       num_beats: 4,
       slices: HashMap::<SliceMode, Vec<u64>>::with_capacity(4),
