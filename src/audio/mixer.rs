@@ -12,51 +12,6 @@ use sample_gen::pvoc::PVOCGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 use sampling::SampleLib;
 
-/// SmoothParam is an helper for parameter smoothing
-/// @TODO should be out of here
-struct SmoothParam {
-  /// keep track of old value
-  prev_val: f32,
-  /// keep track of next value
-  next_val: f32,
-  /// memorize the ramp
-  t: usize,
-}
-
-impl SmoothParam {
-
-  /// constructor
-  fn new(pv: f32, nv: f32) -> Self {
-    return SmoothParam{prev_val:pv, next_val:nv, t: 0}
-  }
-
-  /// set the next value but scaled
-  fn new_value_scaled(&mut self, v: f32, new_start: f32, new_end: f32) {
-    // scale
-    let nv = new_start + (new_end - new_start) * ((v - 0.0) / (1.0 - 0.0));
-    self.new_value(nv);
-  }
-
-  /// set next value
-  fn new_value(&mut self, v: f32) {
-    self.prev_val = self.next_val;
-    self.next_val = v;
-    // reset t
-    self.t = 0;
-  }
-
-  /// lin interp between previous and next value, keeping ramp state
-  fn get_param(&mut self, len: usize) -> f32 {
-    let rt = self.t as f32/len as f32;
-    let smoothed = (1.0 - rt) * self.prev_val + rt * self.next_val;
-    // inc the time if the buffer isnt complete
-    if self.t < len {
-      self.t += 1;
-    }
-    return smoothed;
-  }
-}
-
 /// AudioTrack is a AudioMixer track that embeds one sample generator and a chain of effects.
 struct AudioTrack {
   /// The attached sample generator.
@@ -66,11 +21,15 @@ struct AudioTrack {
   /// A first audio round is necessary to get the size
   audio_buffer: Vec<Stereo<f32>>,
   /// Gain is the gain value of the track, pre effects, smoothed
-  gain: SmoothParam,
+  gain: ::control::SmoothParam,
   /// Pan is the panning value of the track, pre effects, smoothed
-  pan: SmoothParam,
+  pan: ::control::SmoothParam,
   /// Bank index (track-locked)
-  bank: usize
+  bank: usize,
+  /// Direction parameter for sample selection (Up/Down).
+  sample_select: ::control::DirectionalParam,
+  /// Sample name to keep track for presets as the lib grows
+  sample_name: String
 }
 
 /// AudioTrack implementation.
@@ -82,16 +41,46 @@ impl AudioTrack {
       // we still dont know how much the buffer wants.
       // let's init at 512 and extend later.
       audio_buffer: Vec::with_capacity(512),
-      gain: SmoothParam::new(0.0, 1.0),
-      pan: SmoothParam::new(0.0, 0.0),
+      gain: ::control::SmoothParam::new(0.0, 1.0),
+      pan: ::control::SmoothParam::new(0.0, 0.0),
+      sample_select: ::control::DirectionalParam::new(0.0, 0.0),
       bank,
+      sample_name: String::from(""),
     }
   }
 
-  /// loads (moves) a new smart_buffer in the gen
+  /// Loads (moves) an arbitrary SmartBuffer in the gen.
   fn load_buffer(&mut self, buffer: SmartBuffer) {
-    println!("Loading smart buffer: {}", buffer.file_name);
+    // memorize
+    self.sample_name = buffer.file_name.clone();
     self.generator.load_buffer(buffer);
+  }
+
+  /// loads currently tracked smart buffer
+  fn load_current_buffer(&mut self, sample_lib: &SampleLib) {
+    // @TODO There is a clone here in audio path
+    self.generator.load_buffer(sample_lib.get_sample_by_name(self.bank, self.sample_name.as_str()))
+  }
+
+  /// loads the first sample in the the bank
+  fn load_first_buffer(&mut self, sample_lib: &SampleLib) {
+    // @TODO There is a clone here in audio path
+    let first = sample_lib.get_first_sample(self.bank);
+    self.load_buffer(first)
+  }
+
+  /// loads the next sample in the the bank
+  fn load_next_buffer(&mut self, sample_lib: &SampleLib) {
+    // @TODO There is a clone here in audio path
+    let next = sample_lib.get_sibling_sample(self.bank, self.sample_name.as_str(), 1);
+    self.load_buffer(next)
+  }
+
+  /// loads the next sample in the the bank
+  fn load_prev_buffer(&mut self, sample_lib: &SampleLib) {
+    // @TODO There is a clone here in audio path
+    let next = sample_lib.get_sibling_sample(self.bank, self.sample_name.as_str(), -1);
+    self.load_buffer(next)
   }
 
   /// play the underlying sample gen
@@ -137,7 +126,7 @@ pub struct AudioMixer {
   sample_lib: SampleLib,
   /// Tracks owned by the mixer.
   tracks: Vec<AudioTrack>,
-  /// Clock ticks
+  /// Clock ticks are counted here to keep sync with tracks
   clock_ticks: u64,
   /// Command bus reader. Lockless bus to read command messages
   command_rx: BusReader<::control::ControlMessage>,
@@ -161,12 +150,12 @@ impl AudioMixer {
     let mut track2 = AudioTrack::new(Box::new(gen2), 1);
 
     // load defaults
-    track1.load_buffer(sample_lib.get_first_sample(0));
-    track2.load_buffer(sample_lib.get_first_sample(1));
+    track1.load_first_buffer(&sample_lib);
+    track2.load_first_buffer(&sample_lib);
 
     // some some defaults
     tracks.push(track1);
-    tracks.push(track2);
+//    tracks.push(track2);
 
     AudioMixer {
       tracks,
@@ -223,6 +212,31 @@ impl AudioMixer {
       match self.command_rx.try_recv() {
         // we have a message
         Ok(command) => match command {
+          // Change tracked Sample inside the bank
+          ::control::ControlMessage::TrackSampleSelect { tcode: _, val, track_num} => {
+            // check if tracknum is around
+            let tr = self.tracks.get_mut(track_num);
+            match tr {
+              Some(t) => {
+                // set the new selecta
+                t.sample_select.new_value(val);
+
+                // match the resulting dir enum
+                match t.sample_select.get_param() {
+                  ::control::Direction::Up(_) => {
+                    t.load_next_buffer(&self.sample_lib);
+                  },
+                  ::control::Direction::Down(_) => {
+                    t.load_prev_buffer(&self.sample_lib);
+                  },
+                  ::control::Direction::Stable(_) => {},
+                }
+
+              }
+              _ => ()
+            }
+//            println!("change sample on track {}", track_num);
+          }
           // Gain
           ::control::ControlMessage::TrackGain{tcode: _,  val, track_num} => {
             // check if tracknum is around
@@ -244,7 +258,7 @@ impl AudioMixer {
               Some(t) => {
                 // set the gain (max 1.2)
                 t.pan.new_value_scaled(val, -1.0, 1.0);
-                println!("pan pan culcul: {}", t.pan.next_val);
+//                println!("pan pan culcul: {}", t.pan.next_val);
               }
               _ => ()
             }

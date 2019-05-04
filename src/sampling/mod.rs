@@ -4,7 +4,8 @@ use std::error::Error;
 
 const AUDIO_ROOT: &str = "/Users/nunja/Documents/Audiolib/smplr";
 
-/// SampleLib Manage samples loading and analytics
+/// SampleLib Manage samples loading and analytics.
+/// Its like a In-Memory Sample Database
 pub struct SampleLib
 {
   /// In-Memory SmartBuffer Store.
@@ -13,7 +14,23 @@ pub struct SampleLib
 }
 
 impl SampleLib {
-  /// Gets the first sample of the bank, returns Empty
+  /// Gets the first sample of the bank, returns Empty if not found
+  pub fn get_first_sample_name(&self, bank: usize) -> &str {
+    let b = match self.buffers.get(bank) {
+      Some(x) => {
+        // take the first
+        let first = match x.first() {
+          Some(x) => {
+            return &x.file_name;
+          }
+          None => return "",
+        };
+      }
+      None => return "",
+    };
+  }
+
+  /// Gets the first sample of the bank, returns Empty if not found
   pub fn get_first_sample(&self, bank: usize) -> SmartBuffer {
     let b = match self.buffers.get(bank) {
       Some(x) => {
@@ -25,6 +42,75 @@ impl SampleLib {
           }
           None => return SmartBuffer::new_empty(),
         };
+      }
+      None => return SmartBuffer::new_empty(),
+    };
+  }
+
+  /// Gets the sample of the bank by double index position, returns Empty if not found
+  pub fn get_sample_by_pos(&self, pos: (usize, usize)) -> SmartBuffer {
+    let b = match self.buffers.get(pos.0) {
+      Some(x) => {
+        // take the pos
+        let first = match x.get(pos.1) {
+          Some(x) => {
+            let c = x;
+            return c.clone();
+          }
+          None => return SmartBuffer::new_empty(),
+        };
+      }
+      None => return SmartBuffer::new_empty(),
+    };
+  }
+
+  /// Gets the sample of the bank by name
+  pub fn get_sample_by_name(&self, bank: usize, name: &str) -> SmartBuffer {
+    let b = match self.buffers.get(bank) {
+      Some(x) => {
+        // take the matching string
+        let found = x.iter().find(|&sb| {
+          return sb.file_name == name;
+        });
+
+        // match
+        match found {
+          None => {
+            return SmartBuffer::new_empty();
+          }
+          Some(sb) => return sb.clone(),
+        }
+      }
+      None => return SmartBuffer::new_empty(),
+    };
+  }
+
+  /// Gets the next sample given a name and a bank, wrapping around
+  pub fn get_sibling_sample(&self, bank: usize, name: &str, order: isize) -> SmartBuffer {
+    let b = match self.buffers.get(bank) {
+      Some(x) => {
+        // take the matching string
+        let found = x.iter().position(|sb| {
+          return sb.file_name == name;
+        });
+
+        // match
+        match found {
+          None => {
+            return SmartBuffer::new_empty();
+          }
+          Some(pos) => {
+
+            let new_pos = pos as isize + order;
+
+            let new_pos = (new_pos + (x.len() as isize)) as usize % x.len();
+
+            return x
+              .get(new_pos)
+              .unwrap()
+              .clone();
+          }
+        }
       }
       None => return SmartBuffer::new_empty(),
     };
