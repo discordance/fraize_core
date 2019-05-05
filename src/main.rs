@@ -1,5 +1,6 @@
 #[macro_use] extern crate serde;
 extern crate hound;
+extern crate num;
 
 mod midi;
 mod audio;

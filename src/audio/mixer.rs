@@ -11,6 +11,24 @@ use sample_gen::slicer::SlicerGen;
 use sample_gen::pvoc::PVOCGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 use sampling::SampleLib;
+use num::Float;
+
+/// extending the StereoTrait for additional mixing power
+pub trait StereoExt<F32> {
+  fn pan(mut self, val: f32) -> Self;
+}
+
+impl StereoExt<f32> for Stereo<f32> {
+  //
+  fn pan(mut self, val: f32) -> Self {
+    let angle = (std::f32::consts::FRAC_PI_2 - 0.0) * ((val- (-1.0)) / (1.0 - (-1.0)));
+//    println!("{} {}", angle.sin(), angle.cos());
+    self[0] = self[0]*angle.sin();
+    self[1] = self[1]*angle.cos();
+    self
+  }
+
+}
 
 /// AudioTrack is a AudioMixer track that embeds one sample generator and a chain of effects.
 struct AudioTrack {
@@ -141,7 +159,7 @@ impl AudioMixer {
     let sample_lib = ::sampling::init_lib().expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT ?");
 
     // create two gens
-    let mut gen1 = PVOCGen::new();
+    let mut gen1 = SlicerGen::new();
     let mut gen2 = RePitchGen::new();
 
     // create two tracks
@@ -193,6 +211,10 @@ impl AudioMixer {
 
         // gain stage
         frame = frame.scale_amp(track.gain.get_param(buff_size));
+
+        // pan stage
+        frame = frame.pan(track.pan.get_param(buff_size));
+//        println!("{:?}", frame);
 
         // mix stage
         acc[0] += frame[0] as f64;
@@ -258,7 +280,6 @@ impl AudioMixer {
               Some(t) => {
                 // set the gain (max 1.2)
                 t.pan.new_value_scaled(val, -1.0, 1.0);
-//                println!("pan pan culcul: {}", t.pan.next_val);
               }
               _ => ()
             }
