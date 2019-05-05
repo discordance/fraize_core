@@ -10,7 +10,9 @@ pub struct SampleLib
 {
   /// In-Memory SmartBuffer Store.
   /// SampleLib is organized in banks.
-  buffers: Vec<Vec<SmartBuffer>>
+  buffers: Vec<Vec<SmartBuffer>>,
+  /// empty buff for ref
+  empty_buff: SmartBuffer
 }
 
 impl SampleLib {
@@ -31,39 +33,39 @@ impl SampleLib {
   }
 
   /// Gets the first sample of the bank, returns Empty if not found
-  pub fn get_first_sample(&self, bank: usize) -> SmartBuffer {
+  pub fn get_first_sample(&self, bank: usize) -> &SmartBuffer {
     match self.buffers.get(bank) {
       Some(b) => {
         // take the first
         let first = match b.first() {
           Some(x) => {
-            return x.clone();
+            return x;
           }
-          None => return SmartBuffer::new_empty(),
+          None => return &self.empty_buff,
         };
       }
-      None => return SmartBuffer::new_empty(),
+      None => return &self.empty_buff,
     };
   }
 
   /// Gets the sample of the bank by double index position, returns Empty if not found
-  pub fn get_sample_by_pos(&self, pos: (usize, usize)) -> SmartBuffer {
+  pub fn get_sample_by_pos(&self, pos: (usize, usize)) -> &SmartBuffer {
     match self.buffers.get(pos.0) {
       Some(b) => {
         // take the pos
         let first = match b.get(pos.1) {
           Some(x) => {
-            return x.clone();
+            return x;
           }
-          None => return SmartBuffer::new_empty(),
+          None => return &self.empty_buff,
         };
       }
-      None => return SmartBuffer::new_empty(),
+      None => return &self.empty_buff,
     };
   }
 
   /// Gets the sample of the bank by name
-  pub fn get_sample_by_name(&self, bank: usize, name: &str) -> SmartBuffer {
+  pub fn get_sample_by_name(&self, bank: usize, name: &str) -> &SmartBuffer {
     match self.buffers.get(bank) {
       Some(b) => {
         // take the matching string
@@ -74,17 +76,17 @@ impl SampleLib {
         // match
         match found {
           None => {
-            return SmartBuffer::new_empty();
+            return &self.empty_buff;
           }
-          Some(sb) => return sb.clone(),
+          Some(sb) => return sb,
         }
       }
-      None => return SmartBuffer::new_empty(),
+      None => return &self.empty_buff,
     };
   }
 
   /// Gets the next sample given a name and a bank, wrapping around
-  pub fn get_sibling_sample(&self, bank: usize, name: &str, order: isize) -> SmartBuffer {
+  pub fn get_sibling_sample(&self, bank: usize, name: &str, order: isize) -> &SmartBuffer {
     match self.buffers.get(bank) {
       Some(b) => {
         // take the matching string
@@ -95,19 +97,18 @@ impl SampleLib {
         // match
         match found {
           None => {
-            return SmartBuffer::new_empty();
+            return &self.empty_buff;
           }
           Some(pos) => {
             let new_pos = pos as isize + order;
             let new_pos = (new_pos + (b.len() as isize)) as usize % b.len();
             return b
               .get(new_pos)
-              .unwrap()
-              .clone();
+              .unwrap();
           }
         }
       }
-      None => return SmartBuffer::new_empty(),
+      None => return &self.empty_buff,
     };
   }
 }
@@ -116,7 +117,8 @@ impl SampleLib {
 pub fn init_lib() -> Result<SampleLib, Box<Error>> {
   // init lib
   let mut lib = SampleLib {
-    buffers: Vec::new()
+    buffers: Vec::new(),
+    empty_buff: SmartBuffer::new_empty()
   };
 
   // directory walk

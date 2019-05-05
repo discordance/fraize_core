@@ -67,9 +67,9 @@ impl AudioTrack {
   }
 
   /// Loads (moves) an arbitrary SmartBuffer in the gen.
-  fn load_buffer(&mut self, buffer: SmartBuffer) {
+  fn load_buffer(&mut self, buffer: &SmartBuffer) {
     // memorize
-    self.sample_name = buffer.file_name.clone();
+    self.sample_name = buffer.file_name.clone(); // @TODO Clone
     self.generator.load_buffer(buffer);
   }
 

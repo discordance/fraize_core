@@ -1,6 +1,9 @@
 extern crate aubio;
 extern crate sample;
 extern crate time_calc;
+extern crate time;
+
+use self::time::PreciseTime;
 
 use self::aubio::pvoc::Pvoc;
 use self::sample::frame::Stereo;
@@ -256,9 +259,9 @@ impl SampleGenerator for PVOCGen {
   }
 
   /// Loads a SmartBuffer, moving it
-  fn load_buffer(&mut self, smartbuf: SmartBuffer) {
-    // simply move in the buffer
-    self.sample_gen.smartbuf = smartbuf;
+  fn load_buffer(&mut self, smartbuf: &SmartBuffer) {
+    // clone is faster ....
+    self.sample_gen.smartbuf = smartbuf.clone();
   }
 
   /// Sync the slicer according to global values

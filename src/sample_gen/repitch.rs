@@ -88,9 +88,9 @@ impl SampleGenerator for RePitchGen {
   }
 
   /// Loads a SmartBuffer, moving it
-  fn load_buffer(&mut self, smartbuf: SmartBuffer) {
+  fn load_buffer(&mut self, smartbuf: &SmartBuffer) {
     // simply move
-    self.sample_gen.smartbuf = smartbuf;
+    self.sample_gen.smartbuf = smartbuf.clone();
   }
 
   /// Sync the sample buffer according to global values

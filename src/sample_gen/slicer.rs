@@ -129,9 +129,9 @@ impl SampleGenerator for SlicerGen {
   }
 
   /// Loads a SmartBuffer, moving it
-  fn load_buffer(&mut self, smartbuf: SmartBuffer) {
+  fn load_buffer(&mut self, smartbuf: &SmartBuffer) {
     // simply move in the buffer
-    self.sample_gen.smartbuf = smartbuf;
+    self.sample_gen.smartbuf = smartbuf.clone();
     // init the previous slice
     self.pslice = self.sample_gen.smartbuf.slices[&self.slicer_mode].len() - 1;
   }

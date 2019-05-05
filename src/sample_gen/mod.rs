@@ -69,15 +69,27 @@ pub struct SmartBuffer {
 
 /// Implementation
 impl SmartBuffer {
-  /// returns an empty SmartBuffer
+  /// returns an empty SmartBuffer, without allocation ?
   pub fn new_empty() -> Self {
     SmartBuffer {
       frames: Vec::new(),
-      file_name: String::from("empty"),
+      file_name: String::from(""),
       original_tempo: 120.0,
       num_beats: 4,
-      slices: HashMap::<SliceMode, Vec<u64>>::with_capacity(4),
+      slices: HashMap::<SliceMode, Vec<u64>>::new(),
     }
+  }
+
+  /// Copy SmartBuffer from ref
+  pub fn copy_from_ref(&mut self, from: &SmartBuffer) {
+    // start by the frames
+    self.frames.resize(from.frames.len(), Stereo::<f32>::equilibrium());
+    self.frames.copy_from_slice(&from.frames[..]);
+    // copy the fields
+    self.file_name = from.file_name.clone(); // @TODO clone
+    self.num_beats = from.num_beats;
+    self.original_tempo = from.original_tempo;
+    self.slices = from.slices.clone(); // @TODO clone
   }
 
   /// Loads and analyse a wave file
@@ -235,8 +247,8 @@ impl SampleGen {
 pub trait SampleGenerator {
   /// Processes the next block of samples, write it in referenced frame slice.
   fn next_block(&mut self, block_out: &mut [Stereo<f32>]);
-  /// Loads a SmartBuffer using `move`
-  fn load_buffer(&mut self, smartbuf: SmartBuffer);
+  /// Loads a SmartBuffer by copying
+  fn load_buffer(&mut self, smartbuf: &SmartBuffer);
   /// Sync is used to synchronise the generator according to the global tempo and the current clock ticks elaspsed.
   /// Many operations can append during a sync internally.
   fn sync(&mut self, global_tempo: u64, tick: u64);
