@@ -98,7 +98,7 @@ impl SlicerGen {
           1024 * 2,
           slice_len as i64,
         ))
-        .scale_amp(2.0);
+        .scale_amp(1.45); // factor that balance with other sample gen types
 
       self.cursor += 1;
     }

@@ -11,7 +11,9 @@ use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 ///
 const PI: f32 = std::f32::consts::PI;
 const TWO_PI: f32 = std::f32::consts::PI * 2.0;
-const PVOC_1_GAIN: f32 = 0.4;
+
+/// Factor that balance with other sample gen types
+const PVOC_1_GAIN: f32 = 0.475;
 
 fn unwrap2pi(phase: f32) -> f32 {
   return phase + TWO_PI * (1. + (-(phase + PI) / TWO_PI).floor());
@@ -246,7 +248,7 @@ impl SampleGenerator for PVOCGen {
     let mut drained = self.pvoc_1.buff_pvoc_out.drain(0..block_out.len());
     for frame_out in block_out.iter_mut() {
       match drained.next() {
-        // yes here it needs some gain
+        // yes here it needs some cuts
         Some(s) => *frame_out = [s * PVOC_1_GAIN, s * PVOC_1_GAIN],
         None => *frame_out = Stereo::<f32>::equilibrium(),
       };

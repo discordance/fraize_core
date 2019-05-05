@@ -83,7 +83,7 @@ impl SampleGenerator for RePitchGen {
     // playing, simply use the iterator
     for frame_out in block_out.iter_mut() {
       // can safely be unwrapped because always return something
-      *frame_out = self.next().unwrap();
+      *frame_out = self.next().unwrap().scale_amp(1.44); // factor that balance with other sample gen types
     }
   }
 

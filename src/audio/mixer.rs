@@ -11,6 +11,7 @@ use sample_gen::slicer::SlicerGen;
 use sample_gen::pvoc::PVOCGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 use sampling::SampleLib;
+use aubio::pvoc::Pvoc;
 
 /// extending the StereoTrait for additional mixing power
 pub trait StereoExt<F32> {
@@ -157,7 +158,7 @@ impl AudioMixer {
     let sample_lib = ::sampling::init_lib().expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT ?");
 
     // create two gens
-    let mut gen1 = RePitchGen::new();
+    let mut gen1 = RePitchGen ::new();
     let mut gen2 = RePitchGen::new();
 
     // create two tracks

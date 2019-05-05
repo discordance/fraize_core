@@ -12,7 +12,20 @@ use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
 use self::sample::frame::{Stereo};
 use self::sample::ToFrameSliceMut;
 
-// initialize audio machinery
+/// Loudness
+pub fn loudness(block_out: & [Stereo<f32>]) -> f32 {
+  let mut sum = 0.0f32;
+  for s in block_out {
+    let a = (s[0]+s[1]) / 2.0;
+    sum += a*a;
+  }
+
+  let rms = f32::sqrt(sum/block_out.len() as f32);
+//  let decibel = 20.0 * f32::log10(rms);
+  return rms;
+}
+
+/// Initialize audio machinery
 pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
 
   // init mixer
@@ -54,6 +67,8 @@ pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
   // add stream
   event_loop.play_stream(stream_id);
 
+  let mut max_rms = 0.0;
+
   // audio callback
   event_loop.run(move |_stream_id, stream_data| {
 
@@ -68,6 +83,13 @@ pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
 
         // write audio from the mixer
         mixer.next_block(buffer);
+
+        // calculate output volume
+        let loud = loudness(buffer);
+        if loud > max_rms {
+          max_rms = loud;
+        }
+        println!("lourd {}", max_rms);
       }
       _ => (),
     }
