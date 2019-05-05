@@ -47,7 +47,7 @@ struct PVOCUnit {
   pphas: Vec<f32>,
   /// Phase Accumulator to keep track of phase.
   /// @TODO maybe should be in 64 bits because its an accumulator ?
-  phas_acc: Vec<f64>,
+  phas_acc: Vec<f32>,
   /// Hops counter. Hops are frames overlaps.
   elapsed_hops: usize,
   /// Used for interpolation, float relative to elapsed hops.

@@ -85,11 +85,11 @@ pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
         mixer.next_block(buffer);
 
         // calculate output volume
-        let loud = loudness(buffer);
-        if loud > max_rms {
-          max_rms = loud;
-        }
-        println!("lourd {}", max_rms);
+//        let loud = loudness(buffer);
+//        if loud > max_rms {
+//          max_rms = loud;
+//        }
+//        println!("lourd {}", max_rms);
       }
       _ => (),
     }

@@ -158,7 +158,7 @@ impl AudioMixer {
     let sample_lib = ::sampling::init_lib().expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT ?");
 
     // create two gens
-    let mut gen1 = RePitchGen ::new();
+    let mut gen1 = PVOCGen ::new();
     let mut gen2 = RePitchGen::new();
 
     // create two tracks
