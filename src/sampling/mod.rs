@@ -16,10 +16,10 @@ pub struct SampleLib
 impl SampleLib {
   /// Gets the first sample of the bank, returns Empty if not found
   pub fn get_first_sample_name(&self, bank: usize) -> &str {
-    let b = match self.buffers.get(bank) {
-      Some(x) => {
+    match self.buffers.get(bank) {
+      Some(b) => {
         // take the first
-        let first = match x.first() {
+        let first = match b.first() {
           Some(x) => {
             return &x.file_name;
           }
@@ -32,13 +32,12 @@ impl SampleLib {
 
   /// Gets the first sample of the bank, returns Empty if not found
   pub fn get_first_sample(&self, bank: usize) -> SmartBuffer {
-    let b = match self.buffers.get(bank) {
-      Some(x) => {
+    match self.buffers.get(bank) {
+      Some(b) => {
         // take the first
-        let first = match x.first() {
+        let first = match b.first() {
           Some(x) => {
-            let c = x;
-            return c.clone();
+            return x.clone();
           }
           None => return SmartBuffer::new_empty(),
         };
@@ -49,13 +48,12 @@ impl SampleLib {
 
   /// Gets the sample of the bank by double index position, returns Empty if not found
   pub fn get_sample_by_pos(&self, pos: (usize, usize)) -> SmartBuffer {
-    let b = match self.buffers.get(pos.0) {
-      Some(x) => {
+    match self.buffers.get(pos.0) {
+      Some(b) => {
         // take the pos
-        let first = match x.get(pos.1) {
+        let first = match b.get(pos.1) {
           Some(x) => {
-            let c = x;
-            return c.clone();
+            return x.clone();
           }
           None => return SmartBuffer::new_empty(),
         };
@@ -66,10 +64,10 @@ impl SampleLib {
 
   /// Gets the sample of the bank by name
   pub fn get_sample_by_name(&self, bank: usize, name: &str) -> SmartBuffer {
-    let b = match self.buffers.get(bank) {
-      Some(x) => {
+    match self.buffers.get(bank) {
+      Some(b) => {
         // take the matching string
-        let found = x.iter().find(|&sb| {
+        let found = b.iter().find(|&sb| {
           return sb.file_name == name;
         });
 
@@ -87,10 +85,10 @@ impl SampleLib {
 
   /// Gets the next sample given a name and a bank, wrapping around
   pub fn get_sibling_sample(&self, bank: usize, name: &str, order: isize) -> SmartBuffer {
-    let b = match self.buffers.get(bank) {
-      Some(x) => {
+    match self.buffers.get(bank) {
+      Some(b) => {
         // take the matching string
-        let found = x.iter().position(|sb| {
+        let found = b.iter().position(|sb| {
           return sb.file_name == name;
         });
 
@@ -100,12 +98,9 @@ impl SampleLib {
             return SmartBuffer::new_empty();
           }
           Some(pos) => {
-
             let new_pos = pos as isize + order;
-
-            let new_pos = (new_pos + (x.len() as isize)) as usize % x.len();
-
-            return x
+            let new_pos = (new_pos + (b.len() as isize)) as usize % b.len();
+            return b
               .get(new_pos)
               .unwrap()
               .clone();

@@ -11,18 +11,16 @@ use sample_gen::slicer::SlicerGen;
 use sample_gen::pvoc::PVOCGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 use sampling::SampleLib;
-use num::Float;
 
 /// extending the StereoTrait for additional mixing power
 pub trait StereoExt<F32> {
-  fn pan(mut self, val: f32) -> Self;
+  fn pan(self, val: f32) -> Self;
 }
 
 impl StereoExt<f32> for Stereo<f32> {
   //
   fn pan(mut self, val: f32) -> Self {
     let angle = (std::f32::consts::FRAC_PI_2 - 0.0) * ((val- (-1.0)) / (1.0 - (-1.0)));
-//    println!("{} {}", angle.sin(), angle.cos());
     self[0] = self[0]*angle.sin();
     self[1] = self[1]*angle.cos();
     self
@@ -159,7 +157,7 @@ impl AudioMixer {
     let sample_lib = ::sampling::init_lib().expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT ?");
 
     // create two gens
-    let mut gen1 = SlicerGen::new();
+    let mut gen1 = RePitchGen::new();
     let mut gen2 = RePitchGen::new();
 
     // create two tracks
