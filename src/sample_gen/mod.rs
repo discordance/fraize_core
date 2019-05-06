@@ -31,7 +31,7 @@ use std::collections::HashMap;
 pub const PPQN: Ppqn = 24;
 
 /// how many sample to fade in / out to avoid clicks when resync audio
-const NOCLICK_FADE_LENGTH: u64 = 128;
+const NOCLICK_FADE_LENGTH: u64 = 64;
 
 /// SliceMode defines how the slices are cut in a smart buffer.
 /// Can be OnsetDetection or fixed BAR divisions.
@@ -56,7 +56,6 @@ pub struct SmartBuffer {
   pub file_name: String,
   /// Samples in Stereo / float32 format. Use the `sample` Crate for convenience methods.
   /// We only support this format for the moment.
-  /// @TODO implement as Generic ?
   frames: Vec<Stereo<f32>>,
   /// Original tempo of the audio phrase (if it's a phrase).
   original_tempo: f64,

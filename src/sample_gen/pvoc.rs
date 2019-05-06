@@ -12,14 +12,26 @@ use self::time_calc::Ticks;
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 
 ///
-const PI: f32 = std::f32::consts::PI;
-const TWO_PI: f32 = std::f32::consts::PI * 2.0;
+const PI: f64 = std::f64::consts::PI;
+const TWO_PI: f64 = std::f64::consts::PI * 2.0;
 
 /// Factor that balance with other sample gen types
 const PVOC_1_GAIN: f32 = 0.475;
 
-fn unwrap2pi(phase: f32) -> f32 {
+fn unwrap2pi(phase: f64) -> f64 {
   return phase + TWO_PI * (1. + (-(phase + PI) / TWO_PI).floor());
+}
+
+fn copy_from_64(target: &mut [f32], source: &[f64]) {
+  for (i, s) in target.iter_mut().enumerate() {
+    *s = source[i] as f32;
+  }
+}
+
+fn copy_to_64(target: &mut [f64], source: &[f32]) {
+  for (i, s) in target.iter_mut().enumerate() {
+    *s = source[i] as f64;
+  }
 }
 
 /// Just memory holders to help with PVOC timestretching maths.
@@ -45,16 +57,15 @@ struct PVOCUnit {
   /// Buffer of timeshifted samples.
   buff_pvoc_out: Vec<f32>,
   /// Previous pvoc Norms frame.
-  pnorm: Vec<f32>,
+  pnorm: Vec<f64>,
   /// Previous pvoc Phase frame.
-  pphas: Vec<f32>,
+  pphas: Vec<f64>,
   /// Phase Accumulator to keep track of phase.
-  /// @TODO maybe should be in 64 bits because its an accumulator ?
-  phas_acc: Vec<f32>,
+  phas_acc: Vec<f64>,
   /// Hops counter. Hops are frames overlaps.
   elapsed_hops: usize,
   /// Used for interpolation, float relative to elapsed hops.
-  interp_read: f32,
+  interp_read: f64,
   /// Used for interpolation.
   interp_block: usize,
   /// Buffers for calculations.
@@ -82,8 +93,8 @@ impl PVOCUnit {
     // return early if its first block
     // the phase voc needs a warmup, we keep it silent for the first hop block
     if self.elapsed_hops == 0 {
-      self.pnorm.copy_from_slice(&self.local_buffers.curr_norm[..]);
-      self.pphas.copy_from_slice(&self.local_buffers.curr_phase[..]);
+      copy_to_64(&mut self.pnorm[..], &self.local_buffers.curr_norm[..]);
+      copy_to_64(&mut self.pphas[..], &self.local_buffers.curr_phase[..]);
       // push silence in the queue
       for _s in 0..self.hop_size {
         self.buff_pvoc_out.push(0.0);
@@ -100,8 +111,7 @@ impl PVOCUnit {
     // interpolation loop
     loop {
       // break forgot this
-      if self.interp_read >= self.elapsed_hops as f32 {
-        // println!("SECOND BREAK {}", self.buff_pvoc_out.len());
+      if self.interp_read >= self.elapsed_hops as f64 {
         break;
       }
 
@@ -110,14 +120,11 @@ impl PVOCUnit {
 
       // calc interp
       for (i, cnorm) in self.local_buffers.curr_norm.iter().enumerate() {
-        self.local_buffers.new_norm[i] = frac * self.pnorm[i] + (1.0 - frac) * cnorm;
+        self.local_buffers.new_norm[i] = (frac * self.pnorm[i] + (1.0 - frac) * (*cnorm as f64)) as f32;
       }
 
       // phas_acc is updated after
-      self
-        .local_buffers
-        .new_phase
-        .copy_from_slice(&self.phas_acc[..]);
+      copy_from_64(&mut self.local_buffers.new_phase[..], &self.phas_acc[..]);
 
       // compute the new hop
       self.pvoc.to_signal(
@@ -132,8 +139,8 @@ impl PVOCUnit {
       // update the phase
       for (i, pacc) in self.phas_acc.iter_mut().enumerate() {
         // calculate phase advance
-        let phas_adv = (i as f32 / (self.analysis_size as f32 - 1.0)) * (PI * self.hop_size as f32);
-        let mut dphas = self.local_buffers.curr_phase[i] - self.pphas[i] - phas_adv;
+        let phas_adv = (i as f64 / (self.analysis_size as f64 - 1.0)) * (PI * self.hop_size as f64);
+        let mut dphas = self.local_buffers.curr_phase[i] as f64 - self.pphas[i] - phas_adv;
         // unwrap angle to [-pi; pi]
         dphas = unwrap2pi(dphas);
         // cumulate phase, to be used for next frame
@@ -142,12 +149,12 @@ impl PVOCUnit {
 
       // interpolation counters
       self.interp_block += 1;
-      self.interp_read = self.interp_block as f32 * playback_rate as f32;
+      self.interp_read = self.interp_block as f64 * playback_rate;
     }
 
     // copy anyway
-    self.pnorm.copy_from_slice(&self.local_buffers.curr_norm[..]);
-    self.pphas.copy_from_slice(&self.local_buffers.curr_phase[..]);
+    copy_to_64(&mut self.pnorm[..], &self.local_buffers.curr_norm[..]);
+    copy_to_64(&mut self.pphas[..], &self.local_buffers.curr_phase[..]);
 
     // inc hops
     self.elapsed_hops += 1;
