@@ -9,18 +9,18 @@ mod filters;
 
 use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
-use self::sample::frame::{Stereo};
+use self::sample::frame::Stereo;
 use self::sample::ToFrameSliceMut;
 
 /// Loudness
-pub fn loudness(block_out: & [Stereo<f32>]) -> f32 {
+pub fn loudness(block_out: &[Stereo<f32>]) -> f32 {
   let mut sum = 0.0f32;
   for s in block_out {
-    let a = (s[0]+s[1]) / 2.0;
-    sum += a*a;
+    let a = (s[0] + s[1]) / 2.0;
+    sum += a * a;
   }
 
-  let rms = f32::sqrt(sum/block_out.len() as f32);
+  let rms = f32::sqrt(sum / block_out.len() as f32);
 //  let decibel = 20.0 * f32::log10(rms);
   return rms;
 }
@@ -30,6 +30,9 @@ pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
 
   // init mixer
   let mut mixer = mixer::AudioMixer::new_test(midi_rx);
+
+  // enumerate all devices
+//  enumerate_all_devices();
 
   // init audio with CPAL !
   // creates event loop
@@ -51,6 +54,9 @@ pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
   // force the sample rate
   format.sample_rate = cpal::SampleRate(44100);
 
+  // force the number of channel
+  format.channels = 2;
+
   // display some info
   println!("audio device: {}", device.name());
   println!("audio: Fixed OUTPUT Samplerate: {}", format.sample_rate.0);
@@ -71,7 +77,6 @@ pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
 
   // audio callback
   event_loop.run(move |_stream_id, stream_data| {
-
     match stream_data {
       StreamData::Output {
         buffer: UnknownTypeOutputBuffer::F32(mut buffer),
@@ -94,4 +99,51 @@ pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
       _ => (),
     }
   });
+}
+
+// enumerate devices
+fn enumerate_all_devices() {
+  let devices = cpal::devices();
+  println!("Devices: ");
+  for (device_index, device) in devices.enumerate() {
+    println!("{}. \"{}\"",
+             device_index + 1,
+             device.name());
+
+    // Input formats
+    if let Ok(fmt) = device.default_input_format() {
+      println!("  Default input stream format:\n    {:?}", fmt);
+    }
+    let mut input_formats = match device.supported_input_formats() {
+      Ok(f) => f.peekable(),
+      Err(e) => {
+        println!("Error: {:?}", e);
+        continue;
+      }
+    };
+    if input_formats.peek().is_some() {
+      println!("  All supported input stream formats:");
+      for (format_index, format) in input_formats.enumerate() {
+        println!("    {}.{}. {:?}", device_index + 1, format_index + 1, format);
+      }
+    }
+
+    // Output formats
+    if let Ok(fmt) = device.default_output_format() {
+      println!("  Default output stream format:\n    {:?}", fmt);
+    }
+    let mut output_formats = match device.supported_output_formats() {
+      Ok(f) => f.peekable(),
+      Err(e) => {
+        println!("Error: {:?}", e);
+        continue;
+      }
+    };
+    if output_formats.peek().is_some() {
+      println!("  All supported output stream formats:");
+      for (format_index, format) in output_formats.enumerate() {
+        println!("    {}.{}. {:?}", device_index + 1, format_index + 1, format);
+      }
+    }
+  }
 }
