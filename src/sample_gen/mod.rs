@@ -174,6 +174,12 @@ struct SampleGen {
   playback_rate: f64,
   /// playback_mult is a factor of the playback_rate that can be twisted for fun and profit.
   playback_mult: u64,
+  /// loop_div is a div factor to reduce loop size in the buffer (a looping a part of the total available samples). defaults to 1.
+  loop_div: u64,
+  /// loop_offset is an offset to start looping after the real sample start.
+  /// this value is relative to the loop_div. the real offset is loop_offset*loop_div.
+  /// defaults to zero
+  loop_offset: u64,
   /// Is the track is `playing` ?
   /// If false, it just write zero samples in the output buffer, saves some CPU cycles.
   playing: bool,
@@ -183,7 +189,7 @@ struct SampleGen {
   /// Count samples for Fade-Out/Fade-In to avoid clicks when sync
   sync_cursor: u64,
   /// Next frame index to sync to when the Fade-Out/Fade-In is at zero
-  sync_next_frame_index: u64
+  sync_next_frame_index: u64,
 }
 
 /// Standard implem mainly for sync

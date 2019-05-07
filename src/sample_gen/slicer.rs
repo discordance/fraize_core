@@ -2,10 +2,9 @@ extern crate sample;
 extern crate time_calc;
 
 use self::sample::frame::Stereo;
-use self::sample::{Frame};
+use self::sample::Frame;
 use self::time_calc::Ticks;
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
-
 
 /// Slicer sample generator.
 /// Use a method inspired by Beat Slicers.
@@ -29,10 +28,12 @@ impl SlicerGen {
         playback_rate: 1.0,
         frame_index: 0,
         playback_mult: 0,
+        loop_div: 1,
+        loop_offset: 0,
         playing: false,
         smartbuf: SmartBuffer::new_empty(),
-        sync_cursor:0,
-        sync_next_frame_index:0,
+        sync_cursor: 0,
+        sync_next_frame_index: 0,
       },
       pslice: 0,
       cursor: 0,
@@ -60,10 +61,10 @@ impl SlicerGen {
     let next_slice = match positions
       .iter()
       .position(|&x| x as i64 + (cycle * num_frames) > clock_frames)
-    {
-      Some(idx) => idx,
-      None => 0,
-    };
+      {
+        Some(idx) => idx,
+        None => 0,
+      };
 
     // compute curr slice
     let curr_slice = (next_slice as i64 - 1) % num_slices;

@@ -186,6 +186,8 @@ impl PVOCGen {
         playback_rate: 1.0,
         frame_index: 0,
         playback_mult: 0,
+        loop_div: 1,
+        loop_offset: 0,
         playing: false,
         smartbuf: SmartBuffer::new_empty(),
         sync_cursor:0,
