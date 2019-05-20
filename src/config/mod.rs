@@ -1,10 +1,12 @@
 extern crate serde;
 use serde::{Deserialize};
 extern crate toml;
+extern crate dirs;
 
 
 use std::collections::HashMap;
 use std::fs::File;
+use std::error::Error;
 
 use self::toml::from_str;
 use std::io::Read;
@@ -13,6 +15,7 @@ use std::io::Read;
 /// Config struct
 pub struct Config
 {
+  pub audio_root: String,
   pub midi_map: MidiMap
 }
 
@@ -26,14 +29,13 @@ pub struct MidiMap
 
 /// Loads and parse the default config
 pub fn load_default() -> Config {
-  // @TODO have to be serious here
-  let input_path = "./src/config/default.toml";
 
-  // load rson file
-  let mut input = String::new();
-  let _f = File::open(&input_path).expect("Failed opening file").read_to_string(&mut input);
+  let home_dir = dirs::home_dir().unwrap();
+  let input_path = home_dir.join("smplr/config.toml");
 
-  let config: Config = match from_str(&input) {
+  println!("{}", input_path.to_str().unwrap());
+
+  let config: Config = match load_conf(input_path.to_str().unwrap()) {
     Ok(x) => x,
     Err(e) => {
       println!("Failed to load config: {}", e);
@@ -42,4 +44,20 @@ pub fn load_default() -> Config {
     },
   };
   config
+}
+
+/// Loads and parse config
+fn load_conf(path: &str) -> Result<Config, Box<Error>> {
+  // load toml file
+  let mut input = String::new();
+
+  // open
+  let mut f = File::open(&path)?;
+  f.read_to_string(&mut input);
+
+  // parse
+  let conf = from_str(&input)?;
+
+  // ret
+  Ok(conf)
 }

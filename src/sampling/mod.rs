@@ -2,7 +2,7 @@ use sample_gen::SmartBuffer;
 use std::fs;
 use std::error::Error;
 
-const AUDIO_ROOT: &str = "/Users/nunja/Documents/Audiolib/smplr";
+use config::{Config};
 
 /// SampleLib Manage samples loading and analytics.
 /// Its like a In-Memory Sample Database
@@ -114,7 +114,7 @@ impl SampleLib {
 }
 
 /// init the SampleLib, loads the samples
-pub fn init_lib() -> Result<SampleLib, Box<Error>> {
+pub fn init_lib(conf: Config) -> Result<SampleLib, Box<Error>> {
   // init lib
   let mut lib = SampleLib {
     buffers: Vec::new(),
@@ -122,7 +122,7 @@ pub fn init_lib() -> Result<SampleLib, Box<Error>> {
   };
 
   // directory walk
-  let paths = fs::read_dir(AUDIO_ROOT)?;
+  let paths = fs::read_dir(conf.audio_root)?;
 
   for bank_path in paths {
     // somewhat ugly

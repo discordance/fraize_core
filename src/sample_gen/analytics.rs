@@ -42,7 +42,7 @@ fn parse_filepath_beats(path: &str) -> Result<u64, &str> {
 
 /// Get the original tempo based on the beat value written in the filename, or analized with Aubio if not present.
 /// Returns original tempo as computed from file name and the number of beats
-/// @TODO the aubio part
+/// @TODO take care of the the aubio part
 pub fn get_original_tempo(path: &str, num_samples: usize) -> (f64, u64) {
   // compute number of beats
   let num_beats = match parse_filepath_beats(path) {

@@ -95,7 +95,7 @@ impl SampleGenerator for RePitchGen {
     self.sample_gen.smartbuf = smartbuf.clone();
   }
 
-  /// Sync the sample buffer according to global values
+  /// Sync the sample buffer according to global sync values
   fn sync(&mut self, global_tempo: u64, tick: u64) {
     // calculate elapsed clock frames according to the original tempo
     let original_tempo = self.sample_gen.smartbuf.original_tempo;

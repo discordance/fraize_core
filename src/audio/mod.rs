@@ -12,7 +12,9 @@ use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
 use self::sample::frame::Stereo;
 use self::sample::ToFrameSliceMut;
 
-/// Loudness
+use config::{Config};
+
+/// Loudness, per block
 pub fn loudness(block_out: &[Stereo<f32>]) -> f32 {
   let mut sum = 0.0f32;
   for s in block_out {
@@ -26,10 +28,10 @@ pub fn loudness(block_out: &[Stereo<f32>]) -> f32 {
 }
 
 /// Initialize audio machinery
-pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
+pub fn initialize_audio(conf: Config, midi_rx: BusReader<::control::ControlMessage>) {
 
   // init mixer
-  let mut mixer = mixer::AudioMixer::new_test(midi_rx);
+  let mut mixer = mixer::AudioMixer::new_test(conf,midi_rx);
 
   // enumerate all devices
 //  enumerate_all_devices();
@@ -41,15 +43,13 @@ pub fn initialize_audio(midi_rx: BusReader<::control::ControlMessage>) {
   // audio out device
   let device = cpal::default_output_device().expect("audio: no output device available");
 
-  // supported formats is an iterator
-  let mut supported_formats_range = device
-    .supported_output_formats()
-    .expect("audio: error while querying formats");
+  // get the current default out format
+  let mut format = device.default_output_format().expect("should have a default format");
 
-  let mut format = supported_formats_range
-    .next()
-    .expect("audio: No supported format.")
-    .with_max_sample_rate();
+  if format.sample_rate != cpal::SampleRate(44100) {
+    println!("Unsupported Default SampleRate, should be 44100");
+    ::std::process::exit(1);
+  }
 
   // force the sample rate
   format.sample_rate = cpal::SampleRate(44100);

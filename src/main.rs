@@ -21,7 +21,7 @@ fn main() {
     let (midi_thread, midi_rx) = midi::initialize_inputs(conf.clone());
 
     // init audio
-    audio::initialize_audio(midi_rx);
+    audio::initialize_audio(conf, midi_rx);
 
     // wait fo midi thread to exit
     match midi_thread.join() {

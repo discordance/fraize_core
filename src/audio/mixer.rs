@@ -6,14 +6,14 @@ extern crate sample;
 use self::bus::BusReader;
 use self::sample::frame::{Frame, Stereo};
 
+use config::{Config};
 use sample_gen::repitch::RePitchGen;
 use sample_gen::slicer::SlicerGen;
 use sample_gen::pvoc::PVOCGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 use sampling::SampleLib;
-use aubio::pvoc::Pvoc;
 
-/// extending the StereoTrait for additional mixing power
+/// extending the Stereo Trait for additional mixing power
 pub trait StereoExt<F32> {
   fn pan(self, val: f32) -> Self;
 }
@@ -152,13 +152,13 @@ pub struct AudioMixer {
 /// AudioMixer implementation.
 impl AudioMixer {
   /// for testing only
-  pub fn new_test(command_rx: BusReader<::control::ControlMessage>) -> Self {
+  pub fn new_test(conf: Config, command_rx: BusReader<::control::ControlMessage>) -> Self {
 
     // init the sample lib, crash of err
-    let sample_lib = ::sampling::init_lib().expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT ?");
+    let sample_lib = ::sampling::init_lib(conf).expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT in conf ?");
 
     // create two gens
-    let mut gen1 = PVOCGen ::new();
+    let mut gen1 = RePitchGen ::new();
     let mut gen2 = RePitchGen::new();
 
     // create two tracks
