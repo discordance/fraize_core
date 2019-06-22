@@ -42,6 +42,7 @@ impl SlicerGen {
   }
 
   /// Main Logic of Slicer computing the nextframe
+  ///
   fn slicer_next_frame(&mut self) -> Stereo<f32> {
     // slice positions ref
     // depends on slicer mode

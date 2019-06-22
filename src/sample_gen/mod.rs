@@ -24,7 +24,7 @@ pub mod slicer;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
-use self::time_calc::Ppqn;
+use self::time_calc::{Ppqn, Beats};
 use std::collections::HashMap;
 
 /// pulse per quarter note
@@ -205,7 +205,8 @@ impl SampleGen {
   fn sync_get_next_frame(&mut self) -> Stereo<f32> {
 
     // grab some fresh frame
-    let mut next_frame = self.smartbuf.frames[self.frame_index as usize % self.smartbuf.frames.len()];
+    let max_frame = self.loop_get_max_frame() as usize;
+    let mut next_frame = self.smartbuf.frames[self.frame_index as usize % max_frame];
 
     // fade in / out
     next_frame = match self.sync_cursor {
@@ -243,6 +244,22 @@ impl SampleGen {
     self.frame_index = 0;
     self.sync_cursor = 0;
     self.sync_next_frame_index = 0;
+  }
+
+  /// Get the loop upper bound in samples, according to the loop_div (sub-loop length)
+  fn loop_get_max_frame(&self) -> u64 {
+    // how many beats we want
+    let mut num_beats_divided = self.smartbuf.num_beats/self.loop_div;
+
+    // safe
+    if num_beats_divided < 1 {
+      num_beats_divided = 1;
+    }
+
+//    println!("dave {} {}", num_beats_divided, self.loop_div);
+
+    // convert to samples, in original tempo ofc
+    Beats(num_beats_divided as i64).samples(self.smartbuf.original_tempo, 44_100.0) as u64
   }
 }
 

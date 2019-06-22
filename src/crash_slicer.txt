@@ -1,0 +1,52 @@
+o: Fixed OUTPUT Samplerate: 44100
+audio: Supported sample type is F32
+init buffer to size: 128
+thread '<unnamed>' panicked at 'index out of bounds: the len is 33 but the index is 18446744073709551615', /rustc/2aa4c46cfdd726e97360c2734835aa3515e8c858/src/libcore/slice/mod.rs:2455:10
+note: Run with `RUST_BACKTRACE=1` environment variable to display a backtrace.
+thread '<unnamed>' panicked at 'called `Result::unwrap()` on an `Err` value: "PoisonError { inner: .. }"', src/libcore/result.rs:997:5
+stack backtrace:
+   0:        0x1099f4233 - std::sys::unix::backtrace::tracing::imp::unwind_backtrace::h9a87463918f2aff9
+                               at src/libstd/sys/unix/backtrace/tracing/gcc_s.rs:39
+   1:        0x1099f03fc - std::sys_common::backtrace::_print::h54740e69908f9100
+                               at src/libstd/sys_common/backtrace.rs:70
+   2:        0x1099f31d1 - std::panicking::default_hook::{{closure}}::h519f1fd4b67636f1
+                               at src/libstd/sys_common/backtrace.rs:58
+                               at src/libstd/panicking.rs:200
+   3:        0x1099f2ed7 - std::panicking::default_hook::h5442e3ae9abda811
+                               at src/libstd/panicking.rs:215
+   4:        0x1099f395e - <std::panicking::begin_panic::PanicPayload<A> as core::panic::BoxMeUp>::get::hfb37cabc364058a5
+                               at src/libstd/panicking.rs:478
+   5:        0x1099f347c - std::panicking::continue_panic_fmt::h3de7ba5e03709cd8
+                               at src/libstd/panicking.rs:385
+   6:        0x1099f3368 - std::panicking::try::do_call::hbdc2ad4ee791d633
+                               at src/libstd/panicking.rs:312
+   7:        0x109a096d1 - core::char::methods::<impl char>::escape_debug::h212c39657852eb51
+                               at src/libcore/panicking.rs:85
+   8:        0x1099cbfc3 - core::result::unwrap_failed::h9fbf38b80f5a9980
+                               at /rustc/2aa4c46cfdd726e97360c2734835aa3515e8c858/src/libcore/macros.rs:16
+   9:        0x1099d0608 - coreaudio::audio_unit::render_callback::<impl coreaudio::audio_unit::AudioUnit>::set_render_callback::{{closure}}::h2f1d86065a24b2e4
+                               at /rustc/2aa4c46cfdd726e97360c2734835aa3515e8c858/src/libcore/result.rs:798
+                               at /Users/nunja/.cargo/git/checkouts/cpal-c1521e46f627becd/ef7a4b6/src/coreaudio/mod.rs:745
+                               at /Users/nunja/.cargo/registry/src/github.com-1ecc6299db9ec823/coreaudio-rs-0.9.1/src/audio_unit/render_callback.rs:432
+  10:        0x10d326d32 - _ZN14AUInputElement9PullInputERjRK14AudioTimeStampjj
+  11:        0x10d3269c1 - _ZN23AUInputFormatConverter29InputProcEP20OpaqueAudioConverterPjP15AudioBufferListPP28AudioStreamPacketDescriptionPv
+  12:     0x7fff845c8181 - _ZN19AudioConverterChain13CallInputProcEj
+  13:     0x7fff845c7f17 - _ZN19AudioConverterChain23FillBufferFromInputProcEPjP12CABufferList
+  14:     0x7fff845c7e86 - _ZN22BufferedAudioConverter13GetInputBytesEjRjRPK12CABufferList
+  15:     0x7fff845c7d47 - _ZN12CBRConverter12RenderOutputEP12CABufferListjRjP28AudioStreamPacketDescription
+  16:     0x7fff845c00aa - _ZN22BufferedAudioConverter10FillBufferERjR15AudioBufferListP28AudioStreamPacketDescription
+  17:     0x7fff845c0290 - _ZN19AudioConverterChain12RenderOutputEP12CABufferListjRjP28AudioStreamPacketDescription
+  18:     0x7fff845c00aa - _ZN22BufferedAudioConverter10FillBufferERjR15AudioBufferListP28AudioStreamPacketDescription
+  19:     0x7fff845bfdbe - AudioConverterFillComplexBuffer
+  20:        0x10d326374 - _ZN23AUInputFormatConverter219PullAndConvertInputERK14AudioTimeStampRjR15AudioBufferListP28AudioStreamPacketDescriptionRb
+  21:        0x10d325c39 - _ZN15AUConverterBase9RenderBusERjRK14AudioTimeStampjj
+  22:        0x10d323ff3 - _ZN6AUBase11DoRenderBusERjRK14AudioTimeStampjP15AUOutputElementjR15AudioBufferList
+  23:        0x10d3229dd - _ZN6AUBase8DoRenderERjRK14AudioTimeStampjjR15AudioBufferList
+  24:        0x10d32959d - _ZN5AUHAL8AUIOProcEjPK14AudioTimeStampPK15AudioBufferListS2_PS3_S2_Pv
+  25:     0x7fff8dd1bc12 - _ZN19HALC_ProxyIOContext10IOWorkLoopEv
+  26:     0x7fff8dd1b15d - _ZN19HALC_ProxyIOContext13IOThreadEntryEPv
+  27:     0x7fff8dd1b032 - _ZN13HALB_IOThread5EntryEPv
+  28:     0x7fff8dea599c - _pthread_body
+  29:     0x7fff8dea5919 - _pthread_start
+thread panicked while panicking. aborting.
+[1]    8031 illegal hardware instruction  cargo run

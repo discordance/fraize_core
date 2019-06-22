@@ -15,8 +15,18 @@ use std::io::Read;
 /// Config struct
 pub struct Config
 {
+  pub tracks: Vec<TrackType>,
   pub audio_root: String,
   pub midi_map: MidiMap
+}
+
+#[derive(Debug, Clone, Deserialize)]
+/// TrackType enum
+pub enum TrackType
+{
+  SlicerGen{bank: usize},
+  RePitchGen{bank: usize},
+  PVOCGen{bank: usize}
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -57,7 +67,8 @@ fn load_conf(path: &str) -> Result<Config, Box<Error>> {
 
   // parse
   let conf = from_str(&input)?;
-
+  // println!("conf: {:?}", conf);
+  
   // ret
   Ok(conf)
 }

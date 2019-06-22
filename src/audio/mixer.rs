@@ -6,7 +6,7 @@ extern crate sample;
 use self::bus::BusReader;
 use self::sample::frame::{Frame, Stereo};
 
-use config::{Config};
+use config::{Config, TrackType};
 use sample_gen::repitch::RePitchGen;
 use sample_gen::slicer::SlicerGen;
 use sample_gen::pvoc::PVOCGen;
@@ -155,24 +155,33 @@ impl AudioMixer {
   pub fn new_test(conf: Config, command_rx: BusReader<::control::ControlMessage>) -> Self {
 
     // init the sample lib, crash of err
-    let sample_lib = ::sampling::init_lib(conf).expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT in conf ?");
+    let sample_lib = ::sampling::init_lib(conf.clone()).expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT in conf ?");
 
-    // create two gens
-    let mut gen1 = RePitchGen ::new();
-    let mut gen2 = RePitchGen::new();
-
-    // create two tracks
+    // create tracks according to the config
     let mut tracks = Vec::new();
-    let mut track1 = AudioTrack::new(Box::new(gen1), 0);
-    let mut track2 = AudioTrack::new(Box::new(gen2), 1);
 
-    // load defaults
-    track1.load_first_buffer(&sample_lib);
-    track2.load_first_buffer(&sample_lib);
-
-    // some some defaults
-    tracks.push(track1);
-//    tracks.push(track2);
+    for t in conf.tracks.iter() {
+      match t {
+        TrackType::RePitchGen{bank} => {
+          let mut gen = RePitchGen::new();
+          let mut track = AudioTrack::new(Box::new(gen), *bank);
+          track.load_first_buffer(&sample_lib);
+          tracks.push(track);
+        },
+        TrackType::SlicerGen{bank} => {
+          let mut gen = SlicerGen::new();
+          let mut track = AudioTrack::new(Box::new(gen), *bank);
+          track.load_first_buffer(&sample_lib);
+          tracks.push(track);
+        },
+        TrackType::PVOCGen{bank} => {
+          let mut gen = PVOCGen::new();
+          let mut track = AudioTrack::new(Box::new(gen), *bank);
+          track.load_first_buffer(&sample_lib);
+          tracks.push(track);
+        }
+      }
+    }
 
     AudioMixer {
       tracks,
