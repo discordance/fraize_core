@@ -159,7 +159,6 @@ impl AudioMixer {
 
     // create tracks according to the config
     let mut tracks = Vec::new();
-
     for t in conf.tracks.iter() {
       match t {
         TrackType::RePitchGen{bank} => {
