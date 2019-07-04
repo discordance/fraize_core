@@ -18,14 +18,17 @@ fn main() {
     // load default config, immutable
     let conf = config::load_default();
 
+    // init gui
+    let gui = ui::initialize_gui(conf.clone());
+
     // init midi inputs
     let (midi_thread, midi_rx) = midi::initialize_inputs(conf.clone());
 
     // init audio
     let audio_thread = audio::initialize_audio(conf.clone(), midi_rx);
 
-    // init and run ui
-    ui::initialize_gui(conf.clone());
+    // run gui
+    gui.main();
 
     // wait fo audio thread to exit
     match audio_thread.join() {
