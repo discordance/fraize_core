@@ -9,6 +9,7 @@ mod sample_gen;
 mod control;
 mod config;
 mod sampling;
+mod ui;
 
 fn main() {
     // ->
@@ -17,11 +18,23 @@ fn main() {
     // load default config, immutable
     let conf = config::load_default();
 
+    // init gui
+    let gui = ui::initialize_gui(conf.clone());
+
     // init midi inputs
     let (midi_thread, midi_rx) = midi::initialize_inputs(conf.clone());
 
     // init audio
-    audio::initialize_audio(conf, midi_rx);
+    let audio_thread = audio::initialize_audio(conf.clone(), midi_rx);
+
+    // run gui
+    gui.main();
+
+    // wait fo audio thread to exit
+    match audio_thread.join() {
+        Ok(_) => println!("Audio Thread Exited Successfully"),
+        Err(_) => println!("Audio Thread Errored"),
+    }
 
     // wait fo midi thread to exit
     match midi_thread.join() {

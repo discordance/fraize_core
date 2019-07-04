@@ -7,6 +7,7 @@ extern crate sample;
 mod mixer;
 mod filters;
 
+use std::thread;
 use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
 use self::sample::frame::Stereo;
@@ -28,13 +29,13 @@ pub fn loudness(block_out: &[Stereo<f32>]) -> f32 {
 }
 
 /// Initialize audio machinery
-pub fn initialize_audio(conf: Config, midi_rx: BusReader<::control::ControlMessage>) {
+pub fn initialize_audio(conf: Config, midi_rx: BusReader<::control::ControlMessage>) -> thread::JoinHandle<()> {
 
   // init mixer
   let mut mixer = mixer::AudioMixer::new_test(conf,midi_rx);
 
   // enumerate all devices
-//  enumerate_all_devices();
+  //  enumerate_all_devices();
 
   // init audio with CPAL !
   // creates event loop
@@ -75,30 +76,36 @@ pub fn initialize_audio(conf: Config, midi_rx: BusReader<::control::ControlMessa
 
   let mut max_rms = 0.0;
 
-  // audio callback
-  event_loop.run(move |_stream_id, stream_data| {
-    match stream_data {
-      StreamData::Output {
-        buffer: UnknownTypeOutputBuffer::F32(mut buffer),
-      } => {
+  // initialize in its own thread
+  let audio_thread = thread::spawn(move || {
+    // audio callback
+    event_loop.run(move |_stream_id, stream_data| {
+      match stream_data {
+        StreamData::Output {
+          buffer: UnknownTypeOutputBuffer::F32(mut buffer),
+        } => {
 
-        // here we implement the trait sample::ToFrameSliceMut;
-        // we can take a mutable buffer from the audio callback, but framed in stereo !!
-        let buffer: &mut [Stereo<f32>] = buffer.to_frame_slice_mut().unwrap();
+          // here we implement the trait sample::ToFrameSliceMut;
+          // we can take a mutable buffer from the audio callback, but framed in stereo !!
+          let buffer: &mut [Stereo<f32>] = buffer.to_frame_slice_mut().unwrap();
 
-        // write audio from the mixer
-        mixer.next_block(buffer);
+          // write audio from the mixer
+          mixer.next_block(buffer);
 
-        // calculate output volume
-//        let loud = loudness(buffer);
-//        if loud > max_rms {
-//          max_rms = loud;
-//        }
-//        println!("lourd {}", max_rms);
+          // calculate output volume
+          // let loud = loudness(buffer);
+          // if loud > max_rms {
+          //  max_rms = loud;
+          // }
+          // println!("lourd {}", max_rms);
+        }
+        _ => (),
       }
-      _ => (),
-    }
+    });
   });
+
+  // return handle
+  audio_thread
 }
 
 // enumerate devices
