@@ -17,7 +17,6 @@ toml = "0.5.0"
 dirs = "1.0"
 serde = { version = "1.0.90", features = ["derive"] }
 time = "*"
-iui = "0.3"
 
 
 [dependencies.cpal]
