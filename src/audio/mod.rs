@@ -32,7 +32,7 @@ pub fn loudness(block_out: &[Stereo<f32>]) -> f32 {
 pub fn initialize_audio(conf: Config, midi_rx: BusReader<::control::ControlMessage>) -> thread::JoinHandle<()> {
 
   // init mixer
-  let mut mixer = mixer::AudioMixer::new_test(conf,midi_rx);
+  let mut mixer = mixer::AudioMixer::new(conf, midi_rx);
 
   // enumerate all devices
   //  enumerate_all_devices();

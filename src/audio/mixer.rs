@@ -151,8 +151,8 @@ pub struct AudioMixer {
 
 /// AudioMixer implementation.
 impl AudioMixer {
-  /// for testing only
-  pub fn new_test(conf: Config, command_rx: BusReader<::control::ControlMessage>) -> Self {
+  /// init a new mixer, a lot of heavy lifting here
+  pub fn new(conf: Config, command_rx: BusReader<::control::ControlMessage>) -> Self {
 
     // init the sample lib, crash of err
     let sample_lib = ::sampling::init_lib(conf.clone()).expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT in conf ?");
