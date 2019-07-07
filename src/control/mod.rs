@@ -8,7 +8,7 @@ use self::bus::{Bus};
 
 
 /// ControlMessage Enum is the main message for the control bus
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum ControlMessage {
   /// Playback message that is always dispatched globally (for all tracks, effects, ui)
   Playback(PlaybackMessage),
@@ -22,7 +22,7 @@ pub enum ControlMessage {
 }
 
 /// PlaybackMessage have all data used for sync
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PlaybackMessage {
   pub sync: SyncMessage,
   // @TODO should be more generic struct for time
@@ -30,7 +30,7 @@ pub struct PlaybackMessage {
 }
 
 /// Clock sync message
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SyncMessage {
   Start(),
   Stop(),
@@ -76,7 +76,7 @@ impl DirectionalParam {
   }
 }
 
-/// SmoothParam is an helper for parameter smoothing
+/// SmoothParam is an helper for parameter smoothing in audio thread
 pub struct SmoothParam {
   /// keep track of old value
   prev_val: f32,
@@ -123,6 +123,6 @@ impl SmoothParam {
 /// Initialize the control bus
 /// Returns a writable ControlMessageBus
 pub fn initialize_control() -> Bus<ControlMessage> {
-  println!("Size of a Control Message {:?} bytes", mem::size_of::<ControlMessage>());
- return Bus::new(1024);
+  println!("control: Init a new BUS with Control Message of {:?} bytes", mem::size_of::<ControlMessage>());
+  return Bus::new(1024);
 }

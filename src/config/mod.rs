@@ -11,7 +11,7 @@ use std::error::Error;
 use self::toml::from_str;
 use std::io::Read;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 /// Config struct
 pub struct Config
 {
@@ -20,7 +20,7 @@ pub struct Config
   pub midi_map: MidiMap
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 /// TrackType enum
 pub enum TrackType
 {
@@ -29,7 +29,7 @@ pub enum TrackType
   PVOCGen{bank: usize}
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 /// MidiMap struct
 pub struct MidiMap
 {
@@ -63,12 +63,11 @@ fn load_conf(path: &str) -> Result<Config, Box<Error>> {
 
   // open
   let mut f = File::open(&path)?;
-  f.read_to_string(&mut input);
+  f.read_to_string(&mut input).unwrap();
 
   // parse
   let conf = from_str(&input)?;
-  // println!("conf: {:?}", conf);
-  
+
   // ret
   Ok(conf)
 }

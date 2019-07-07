@@ -21,7 +21,7 @@ use config::{Config};
 const PPQN: Ppqn = 24;
 
 /// MidiTime keeps time with midi and calculate useful values
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MidiTime {
   pub tempo: f64,
   pub ticks: u64, // tick counter
@@ -159,7 +159,7 @@ fn midi_cb(midi_tcode: u64, mid_data: &[u8], cb_data: &mut (Bus<ControlMessage>,
 }
 
 // initialize midi machinery
-pub fn initialize_inputs(conf: Config) -> (thread::JoinHandle<()>, BusReader<ControlMessage>) {
+pub fn initialize_midi(conf: Config) -> (thread::JoinHandle<()>, BusReader<ControlMessage>) {
   // init the control bus
   let mut control_bus = ::control::initialize_control();
   // bus channel to communicate from the midi callback to audio tracks
