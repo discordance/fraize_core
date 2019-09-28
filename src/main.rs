@@ -1,15 +1,16 @@
-#[macro_use] extern crate serde;
+#[macro_use]
+extern crate serde;
+extern crate aubio;
 extern crate hound;
 extern crate num;
-extern crate aubio;
 
-mod midi;
 mod audio;
-mod sample_gen;
-mod control;
 mod config;
-mod sampling;
+mod control;
+mod midi;
 mod osc;
+mod sample_gen;
+mod sampling;
 
 fn main() {
     // ->
@@ -18,11 +19,11 @@ fn main() {
     // load default config, immutable
     let conf = config::load_default();
 
-    // init midi 
+    // init midi
     let (midi_thread, midi_rx) = midi::initialize_midi(conf.clone());
 
     // init midi osc
-    let (osc_thread, osc_rx) = osc::initialize_osc(conf.clone());    
+    let (osc_thread, osc_rx) = osc::initialize_osc(conf.clone());
 
     // init audio
     let audio_thread = audio::initialize_audio(conf.clone(), midi_rx);

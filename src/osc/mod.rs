@@ -3,20 +3,20 @@ extern crate rosc;
 extern crate serde;
 extern crate serde_json;
 
-use serde::{Serialize};
-use self::bus::{BusReader};
-use self::rosc::{OscPacket, OscType, OscMessage};
+use self::bus::BusReader;
 use self::rosc::encoder;
-use std::thread;
-use config::{Config};
-use control::{ControlMessage};
-use std::net::{UdpSocket, SocketAddr, SocketAddrV4};
-use std::str::FromStr;
+use self::rosc::{OscMessage, OscPacket, OscType};
 use self::serde_json::to_string;
+use config::Config;
+use control::ControlMessage;
+use serde::Serialize;
+use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
+use std::str::FromStr;
+use std::thread;
 
 /// OSCRemoteControl keeps track of the remote controller app that control this smplr instance
 struct OSCRemoteControl {
-  address: Option<SocketAddr>
+    address: Option<SocketAddr>,
 }
 
 /// Port of the remote OSC app
@@ -24,87 +24,84 @@ const OSC_REMOTE_CONTROL_PORT: u16 = 6666;
 
 /// Initialize the OSC thread / routines
 pub fn initialize_osc(conf: Config) -> (thread::JoinHandle<()>, BusReader<ControlMessage>) {
-  // init the control bus
-  let mut control_bus = ::control::initialize_control();
+    // init the control bus
+    let mut control_bus = ::control::initialize_control();
 
-  // bus channel to communicate from the midi callback to audio tracks
-  let outer_rx = control_bus.add_rx();
+    // bus channel to communicate from the midi callback to audio tracks
+    let outer_rx = control_bus.add_rx();
 
-  // init the osc thread
-  let osc_thread = thread::spawn(move || {
+    // init the osc thread
+    let osc_thread = thread::spawn(move || {
+        // keep track of the remote UI controller using this datastruct
+        let mut osc_controller = OSCRemoteControl { address: None };
 
-    // keep track of the remote UI controller using this datastruct
-    let mut osc_controller = OSCRemoteControl {
-      address: None,
-    };
+        // init host address
+        let host_addr = SocketAddrV4::from_str("0.0.0.0:6667").unwrap();
 
-    // init host address
-    let host_addr = SocketAddrV4::from_str("0.0.0.0:6667").unwrap();
+        // init the receiving socket
+        let socket = UdpSocket::bind(host_addr).unwrap();
+        println!("osc: Listening to {}", host_addr);
 
-    // init the receiving socket
-    let socket = UdpSocket::bind(host_addr).unwrap();
-    println!("osc: Listening to {}", host_addr);
+        // OSC buffer
+        let mut buf = [0u8; rosc::decoder::MTU];
 
-    // OSC buffer
-    let mut buf = [0u8; rosc::decoder::MTU];
-
-    // OSC loop
-    loop {
-      match socket.recv_from(&mut buf) {
-        Ok((size, addr)) => {
-          // println!("osc: Received packet with size {} from: {}", size, addr);
-          let packet = rosc::decoder::decode(&buf[..size]).unwrap();
-          handle_incoming_packet(packet, addr, &mut osc_controller, &socket, &conf);
+        // OSC loop
+        loop {
+            match socket.recv_from(&mut buf) {
+                Ok((size, addr)) => {
+                    // println!("osc: Received packet with size {} from: {}", size, addr);
+                    let packet = rosc::decoder::decode(&buf[..size]).unwrap();
+                    handle_incoming_packet(packet, addr, &mut osc_controller, &socket, &conf);
+                }
+                Err(e) => {
+                    println!("osc: Error receiving from socket: {}", e);
+                    break;
+                }
+            }
         }
-        Err(e) => {
-          println!("osc: Error receiving from socket: {}", e);
-          break;
-        }
-      }
-    }
-  });
+    });
 
-  // return thread handle and receiver
-  return (osc_thread, outer_rx)
+    // return thread handle and receiver
+    return (osc_thread, outer_rx);
 }
 
 // handle an incoming os packet
-fn handle_incoming_packet(packet: OscPacket,
-                          from: SocketAddr,
-                          osc_controller: &mut OSCRemoteControl,
-                          socket: &UdpSocket,
-                          conf: &Config
-    ) {
+fn handle_incoming_packet(
+    packet: OscPacket,
+    from: SocketAddr,
+    osc_controller: &mut OSCRemoteControl,
+    socket: &UdpSocket,
+    conf: &Config,
+) {
     match packet {
         OscPacket::Message(msg) => {
-          // route this packet
-          match msg.addr.as_str() {
-            // ping is important to keep the state of connection
-            "/smplr/ping" => {
-              handle_ping(from, osc_controller, socket, msg)
-            },
-            // remote control is asking for config toml as serialized string
-            "/smplr/get_config" => {
-              // serialize the conf to hson string
-              // can't use toml because datastruct support is too limited
-              let serialized_conf = to_string(conf).unwrap();
+            // route this packet
+            match msg.addr.as_str() {
+                // ping is important to keep the state of connection
+                "/smplr/ping" => handle_ping(from, osc_controller, socket, msg),
+                // remote control is asking for config toml as serialized string
+                "/smplr/get_config" => {
+                    // serialize the conf to hson string
+                    // can't use toml because datastruct support is too limited
+                    let serialized_conf = to_string(conf).unwrap();
 
-              // creates set_config osc message
-              let msg_buf = encoder::encode(&OscPacket::Message(OscMessage {
-                addr: "/smplr/set_config".to_string(),
-                args: Some(vec![OscType::String(serialized_conf)]),
-              })).unwrap();
+                    // creates set_config osc message
+                    let msg_buf = encoder::encode(&OscPacket::Message(OscMessage {
+                        addr: "/smplr/set_config".to_string(),
+                        args: Some(vec![OscType::String(serialized_conf)]),
+                    }))
+                    .unwrap();
 
-              // extract addr
-              let send_to = osc_controller.address.unwrap();
+                    // extract addr
+                    let send_to = osc_controller.address.unwrap();
 
-              // send back the config
-              socket.send_to(&msg_buf, send_to).unwrap();
-            }
-            _ => {
-              println!("osc: unimplemented adress: {:?}", msg.addr);
-            }
-          };
+                    // send back the config
+                    socket.send_to(&msg_buf, send_to).unwrap();
+                }
+                _ => {
+                    println!("osc: unimplemented adress: {:?}", msg.addr);
+                }
+            };
         }
         OscPacket::Bundle(bundle) => {
             // println!("osc: OSC Bundle: {:?}", bundle);
@@ -113,37 +110,41 @@ fn handle_incoming_packet(packet: OscPacket,
 }
 
 // handle ping form controller
-fn handle_ping(from: SocketAddr, osc_controller: &mut OSCRemoteControl, socket: &UdpSocket, msg: OscMessage) {
-  match msg.args {
-    Some(args) => {
-      let rnd_ping = &args[0];
-      match rnd_ping {
-        OscType::Int(r) => {
-          // init the remote control
-          // change port to expected remote port
-          let mut new_from = from.clone();
-          new_from.set_port(OSC_REMOTE_CONTROL_PORT);
-          if osc_controller.address == None {
-            osc_controller.address = Some(new_from);
-          }
+fn handle_ping(
+    from: SocketAddr,
+    osc_controller: &mut OSCRemoteControl,
+    socket: &UdpSocket,
+    msg: OscMessage,
+) {
+    match msg.args {
+        Some(args) => {
+            let rnd_ping = &args[0];
+            match rnd_ping {
+                OscType::Int(r) => {
+                    // init the remote control
+                    // change port to expected remote port
+                    let mut new_from = from.clone();
+                    new_from.set_port(OSC_REMOTE_CONTROL_PORT);
+                    if osc_controller.address == None {
+                        osc_controller.address = Some(new_from);
+                    }
 
-          // creates pingback osc message
-          let msg_buf = encoder::encode(&OscPacket::Message(OscMessage {
-            addr: "/smplr/ping_back".to_string(),
-            args: Some(vec![OscType::Int(*r)]),
-          })).unwrap();
+                    // creates pingback osc message
+                    let msg_buf = encoder::encode(&OscPacket::Message(OscMessage {
+                        addr: "/smplr/ping_back".to_string(),
+                        args: Some(vec![OscType::Int(*r)]),
+                    }))
+                    .unwrap();
 
-          // extract addr
-          let send_to = osc_controller.address.unwrap();
+                    // extract addr
+                    let send_to = osc_controller.address.unwrap();
 
-          // send back
-          socket.send_to(&msg_buf, send_to).unwrap();
-        },
-        _ => {
-          println!("osc: incorrect type ping, ignoring ...")
+                    // send back
+                    socket.send_to(&msg_buf, send_to).unwrap();
+                }
+                _ => println!("osc: incorrect type ping, ignoring ..."),
+            }
         }
-      }
+        None => println!("osc: No arguments in ping, ignoring ..."),
     }
-    None => println!("osc: No arguments in ping, ignoring ..."),
-  }
 }
