@@ -7,7 +7,7 @@ Rust is a promising new language to experiment with audio processing because it 
 
 This phrase sampler is an attempt to create a basic headless audio loops player, that can be synchronised via MIDI or any other (and more suitable) Sync mechanism in the future.
 
-## TODO
+## ROADMAP
 
 - Properly use the sample crate, its gold.
 - Implement features beyond simple sample player engines, as effects and mixers.
@@ -16,4 +16,3 @@ This phrase sampler is an attempt to create a basic headless audio loops player,
 - Implement a control API accessible via Network along with a spec to later control the sampler with a proper GUI.
 - Get rid of any C dependency.
 - Being Platform-independent.
-

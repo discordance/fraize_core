@@ -1,9 +1,13 @@
 extern crate bus;
 extern crate serde;
+extern crate crossbeam_channel;
 
-use self::bus::Bus;
+use self::crossbeam_channel::bounded;
+use self::bus::{Bus, BusReader};
+use config::Config;
 use serde::Deserialize;
 use std::mem;
+use std::thread;
 
 /// ControlMessage Enum is the main message for the control bus
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -144,4 +148,86 @@ pub fn initialize_control() -> Bus<ControlMessage> {
         mem::size_of::<ControlMessage>()
     );
     return Bus::new(1024);
+}
+
+/// ControlHub is the central place that mux messages from MIDI / OSC ... into a unique place.
+pub struct ControlHub {
+    /// Keeps a copy of the config
+    config: Config,
+    /// Sends data to OSC
+    osc_snd: Bus<ControlMessage>,
+}
+
+impl ControlHub {
+    /// init the control hub
+    pub fn new(
+        config: Config,
+        osc_send: Bus<ControlMessage>,
+        osc_rcv: BusReader<ControlMessage>,
+        midi_rcv: BusReader<ControlMessage>,
+    ) -> (Self, BusReader<ControlMessage>) {
+        // init the hub out bus
+        let mut out_bus = initialize_control();
+        let out_rx = out_bus.add_rx();
+
+        // make mutables receivers
+        let mut midi_rcv = midi_rcv;
+        let mut osc_rcv = osc_rcv;
+
+        // use crossbeam to have clonable senders
+        let (cx_tx, cx_rx) = bounded::<ControlMessage>(1024);
+        let cx_tx2 = cx_tx.clone();
+
+        // thread that listen to midi events
+        thread::spawn(move || {
+            // midi listen loop
+            loop {
+                match midi_rcv.recv() {
+                    Ok(m) => {
+                        cx_tx.send(m).unwrap();
+                    }
+                    Err(e) => {
+                        println!("{}", e);
+                    }
+                }
+
+            }
+        });
+
+        // thread that listen to osc events
+        thread::spawn(move || {
+            // osc listen loop
+            loop {
+                match osc_rcv.recv() {
+                    Ok(m) => {
+                        cx_tx2.send(m).unwrap();
+                    }
+                    Err(e) => {
+                       println!("{}", e);
+                    }
+                }
+            }
+        });
+
+        // muxer thread that reads crossbeam reciever and send out to bus
+        thread::spawn(move || {
+            loop {
+                match cx_rx.recv() {
+                    Ok(m) => {
+                        out_bus.broadcast(m);
+                    }
+                    _ => {}
+                }
+            }
+        });
+
+        // create the instance
+        let new_hub = ControlHub {
+            config,
+            osc_snd: osc_send,
+        };
+
+        // return the hub and the rx
+        (new_hub, out_rx)
+    }
 }

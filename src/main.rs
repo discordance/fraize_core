@@ -23,10 +23,13 @@ fn main() {
     let (midi_thread, midi_rx) = midi::initialize_midi(conf.clone());
 
     // init midi osc
-    let (osc_thread, osc_rx) = osc::initialize_osc(conf.clone());
+    let (osc_thread, osc_in, osc_out_rx) = osc::initialize_osc(conf.clone());
+
+    // init the control hub
+    let (control_hub, hub_rx) = control::ControlHub::new(conf.clone(), osc_in, osc_out_rx, midi_rx);
 
     // init audio
-    let audio_thread = audio::initialize_audio(conf.clone(), midi_rx);
+    let audio_thread = audio::initialize_audio(conf.clone(), hub_rx);
 
     // wait fo audio thread to exit
     match audio_thread.join() {

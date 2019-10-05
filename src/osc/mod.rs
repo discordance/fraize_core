@@ -3,13 +3,12 @@ extern crate rosc;
 extern crate serde;
 extern crate serde_json;
 
-use self::bus::BusReader;
+use self::bus::{Bus, BusReader};
 use self::rosc::encoder;
 use self::rosc::{OscMessage, OscPacket, OscType};
 use self::serde_json::to_string;
 use config::Config;
 use control::ControlMessage;
-use serde::Serialize;
 use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
 use std::str::FromStr;
 use std::thread;
@@ -23,15 +22,30 @@ struct OSCRemoteControl {
 const OSC_REMOTE_CONTROL_PORT: u16 = 6666;
 
 /// Initialize the OSC thread / routines
-pub fn initialize_osc(conf: Config) -> (thread::JoinHandle<()>, BusReader<ControlMessage>) {
-    // init the control bus
-    let mut control_bus = ::control::initialize_control();
+pub fn initialize_osc(
+    conf: Config,
+) -> (
+    thread::JoinHandle<()>,
+    Bus<ControlMessage>,
+    BusReader<ControlMessage>,
+) {
+    // init the in -> out control bus
+    let mut in_out_bus = ::control::initialize_control();
 
-    // bus channel to communicate from the midi callback to audio tracks
-    let outer_rx = control_bus.add_rx();
+    // init the in -> out control bus
+    let mut out_in_bus = ::control::initialize_control();
+
+    // this bus will be used to read messages from the control hub
+    let in_rx = out_in_bus.add_rx();
+
+    // this bus will be used to transfer control messages to the control hub
+    let out_rx = in_out_bus.add_rx();
 
     // init the osc thread
     let osc_thread = thread::spawn(move || {
+
+        let command_out = in_out_bus;
+        
         // keep track of the remote UI controller using this datastruct
         let mut osc_controller = OSCRemoteControl { address: None };
 
@@ -62,7 +76,7 @@ pub fn initialize_osc(conf: Config) -> (thread::JoinHandle<()>, BusReader<Contro
     });
 
     // return thread handle and receiver
-    return (osc_thread, outer_rx);
+    return (osc_thread, out_in_bus, out_rx);
 }
 
 // handle an incoming os packet
