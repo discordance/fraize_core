@@ -1,12 +1,12 @@
-extern crate bus;
 extern crate rosc;
 extern crate serde;
 extern crate serde_json;
+extern crate crossbeam_channel;
 
-use self::bus::{Bus, BusReader};
 use self::rosc::encoder;
 use self::rosc::{OscMessage, OscPacket, OscType};
 use self::serde_json::to_string;
+use self::crossbeam_channel::bounded;
 use config::Config;
 use control::ControlMessage;
 use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
@@ -26,25 +26,31 @@ pub fn initialize_osc(
     conf: Config,
 ) -> (
     thread::JoinHandle<()>,
-    Bus<ControlMessage>,
-    BusReader<ControlMessage>,
+    crossbeam_channel::Sender<ControlMessage>,
+    crossbeam_channel::Receiver<ControlMessage>,
 ) {
     // init the in -> out control bus
-    let mut in_out_bus = ::control::initialize_control();
+    // let mut in_out_bus = ::control::initialize_control();
 
     // init the in -> out control bus
-    let mut out_in_bus = ::control::initialize_control();
+    // let mut out_in_bus = ::control::initialize_control();
 
     // this bus will be used to read messages from the control hub
-    let in_rx = out_in_bus.add_rx();
+    // let in_rx = out_in_bus.add_rx();
 
     // this bus will be used to transfer control messages to the control hub
-    let out_rx = in_out_bus.add_rx();
+    // let out_rx = in_out_bus.add_rx();
+
+    // initialise the IN -> OUT crossbeam bus
+    let (out_cx_tx, out_cx_rx) = bounded::<ControlMessage>(1024);
+
+    // initialise the OUT -> IN crossbeam bus
+    let (in_cx_tx, in_cx_rx) = bounded::<ControlMessage>(1024);
 
     // init the osc thread
     let osc_thread = thread::spawn(move || {
 
-        let command_out = in_out_bus;
+        let command_out = out_cx_tx;
         
         // keep track of the remote UI controller using this datastruct
         let mut osc_controller = OSCRemoteControl { address: None };
@@ -76,7 +82,7 @@ pub fn initialize_osc(
     });
 
     // return thread handle and receiver
-    return (osc_thread, out_in_bus, out_rx);
+    return (osc_thread, in_cx_tx, out_cx_rx);
 }
 
 // handle an incoming os packet

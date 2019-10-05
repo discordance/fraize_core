@@ -1,12 +1,9 @@
-extern crate bus;
 extern crate serde;
 extern crate crossbeam_channel;
 
 use self::crossbeam_channel::bounded;
-use self::bus::{Bus, BusReader};
 use config::Config;
 use serde::Deserialize;
-use std::mem;
 use std::thread;
 
 /// ControlMessage Enum is the main message for the control bus
@@ -140,39 +137,24 @@ impl SmoothParam {
     }
 }
 
-/// Initialize the control bus
-/// Returns a writable ControlMessageBus
-pub fn initialize_control() -> Bus<ControlMessage> {
-    println!(
-        "control: Init a new BUS with Control Message of {:?} bytes",
-        mem::size_of::<ControlMessage>()
-    );
-    return Bus::new(1024);
-}
-
 /// ControlHub is the central place that mux messages from MIDI / OSC ... into a unique place.
 pub struct ControlHub {
     /// Keeps a copy of the config
     config: Config,
     /// Sends data to OSC
-    osc_snd: Bus<ControlMessage>,
+    osc_snd: crossbeam_channel::Sender<ControlMessage>
 }
 
 impl ControlHub {
     /// init the control hub
     pub fn new(
         config: Config,
-        osc_send: Bus<ControlMessage>,
-        osc_rcv: BusReader<ControlMessage>,
-        midi_rcv: BusReader<ControlMessage>,
-    ) -> (Self, BusReader<ControlMessage>) {
+        osc_send: crossbeam_channel::Sender<ControlMessage>,
+        osc_rcv: crossbeam_channel::Receiver<ControlMessage>,
+        midi_rcv: crossbeam_channel::Receiver<ControlMessage>,
+    ) -> (Self, crossbeam_channel::Receiver<ControlMessage>) {
         // init the hub out bus
-        let mut out_bus = initialize_control();
-        let out_rx = out_bus.add_rx();
-
-        // make mutables receivers
-        let mut midi_rcv = midi_rcv;
-        let mut osc_rcv = osc_rcv;
+        let (out_cx_tx, out_cx_rx) = bounded::<ControlMessage>(1024);
 
         // use crossbeam to have clonable senders
         let (cx_tx, cx_rx) = bounded::<ControlMessage>(1024);
@@ -214,7 +196,7 @@ impl ControlHub {
             loop {
                 match cx_rx.recv() {
                     Ok(m) => {
-                        out_bus.broadcast(m);
+                        out_cx_tx.send(m).unwrap();
                     }
                     _ => {}
                 }
@@ -228,6 +210,6 @@ impl ControlHub {
         };
 
         // return the hub and the rx
-        (new_hub, out_rx)
+        (new_hub, out_cx_rx)
     }
 }
