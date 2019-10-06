@@ -29,18 +29,6 @@ pub fn initialize_osc(
     crossbeam_channel::Sender<ControlMessage>,
     crossbeam_channel::Receiver<ControlMessage>,
 ) {
-    // init the in -> out control bus
-    // let mut in_out_bus = ::control::initialize_control();
-
-    // init the in -> out control bus
-    // let mut out_in_bus = ::control::initialize_control();
-
-    // this bus will be used to read messages from the control hub
-    // let in_rx = out_in_bus.add_rx();
-
-    // this bus will be used to transfer control messages to the control hub
-    // let out_rx = in_out_bus.add_rx();
-
     // initialise the IN -> OUT crossbeam bus
     let (out_cx_tx, out_cx_rx) = bounded::<ControlMessage>(1024);
 
@@ -51,7 +39,7 @@ pub fn initialize_osc(
     let osc_thread = thread::spawn(move || {
 
         let command_out = out_cx_tx;
-        
+
         // keep track of the remote UI controller using this datastruct
         let mut osc_controller = OSCRemoteControl { address: None };
 
@@ -99,7 +87,7 @@ fn handle_incoming_packet(
             match msg.addr.as_str() {
                 // ping is important to keep the state of connection
                 "/smplr/ping" => handle_ping(from, osc_controller, socket, msg),
-                // remote control is asking for config toml as serialized string
+                // remote control ui is asking for config toml as serialized string
                 "/smplr/get_config" => {
                     // serialize the conf to hson string
                     // can't use toml because datastruct support is too limited

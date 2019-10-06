@@ -12,8 +12,8 @@ pub enum ControlMessage {
     /// Playback message that is always dispatched globally (for all tracks, effects, ui)
     Playback(PlaybackMessage),
 
-    /// Track Gain
-    TrackGain {
+    /// Track Volume
+    TrackVolume {
         tcode: u64,
         val: f32,
         track_num: usize,

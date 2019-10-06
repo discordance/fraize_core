@@ -36,8 +36,8 @@ struct AudioTrack {
     /// As we are using cpal, we dont know yet how to size it at init.
     /// A first audio round is necessary to get the size
     audio_buffer: Vec<Stereo<f32>>,
-    /// Gain is the gain value of the track, pre effects, smoothed
-    gain: ::control::SmoothParam,
+    /// Volume is the volume value of the track, pre effects, smoothed
+    volume: ::control::SmoothParam,
     /// Pan is the panning value of the track, pre effects, smoothed
     pan: ::control::SmoothParam,
     /// Bank index (track-locked)
@@ -57,7 +57,7 @@ impl AudioTrack {
             // we still dont know how much the buffer wants.
             // let's init at 512 and extend later.
             audio_buffer: Vec::with_capacity(512),
-            gain: ::control::SmoothParam::new(0.0, 1.0),
+            volume: ::control::SmoothParam::new(0.0, 1.0),
             pan: ::control::SmoothParam::new(0.0, 0.0),
             sample_select: ::control::DirectionalParam::new(0.0, 0.0),
             bank,
@@ -214,8 +214,8 @@ impl AudioMixer {
             for track in self.tracks.iter_mut() {
                 let mut frame = track.get_frame(i);
 
-                // gain stage
-                frame = frame.scale_amp(track.gain.get_param(buff_size));
+                // volume stage
+                frame = frame.scale_amp(track.volume.get_param(buff_size));
 
                 // pan stage
                 frame = frame.pan(track.pan.get_param(buff_size));
@@ -267,8 +267,8 @@ impl AudioMixer {
                         }
                         //            println!("change sample on track {}", track_num);
                     }
-                    // Gain
-                    ::control::ControlMessage::TrackGain {
+                    // Volume
+                    ::control::ControlMessage::TrackVolume {
                         tcode: _,
                         val,
                         track_num,
@@ -277,13 +277,13 @@ impl AudioMixer {
                         let tr = self.tracks.get_mut(track_num);
                         match tr {
                             Some(t) => {
-                                // set the gain (max 1.2)
-                                t.gain.new_value(val * 1.2);
+                                // set the volume (max 1.2)
+                                t.volume.new_value(val * 1.2);
                             }
                             _ => (),
                         }
                     }
-                    // Gain
+                    // Pan
                     ::control::ControlMessage::TrackPan {
                         tcode: _,
                         val,
@@ -293,7 +293,7 @@ impl AudioMixer {
                         let tr = self.tracks.get_mut(track_num);
                         match tr {
                             Some(t) => {
-                                // set the gain (max 1.2)
+                                // set the pan
                                 t.pan.new_value_scaled(val, -1.0, 1.0);
                             }
                             _ => (),

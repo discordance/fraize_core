@@ -97,13 +97,13 @@ fn midi_cb(
                             // fill in good values and broadcast
                             match message {
                                 ControlMessage::Playback(_) => {}
-                                ControlMessage::TrackGain {
+                                ControlMessage::TrackVolume {
                                     tcode: _,
                                     val: _,
                                     track_num,
                                 } => {
                                     // broadcast
-                                    let m = ControlMessage::TrackGain {
+                                    let m = ControlMessage::TrackVolume {
                                         tcode: midi_tcode,
                                         val: val_f,
                                         track_num,
