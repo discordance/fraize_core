@@ -1,12 +1,12 @@
+extern crate crossbeam_channel;
 extern crate rosc;
 extern crate serde;
 extern crate serde_json;
-extern crate crossbeam_channel;
 
+use self::crossbeam_channel::bounded;
 use self::rosc::encoder;
 use self::rosc::{OscMessage, OscPacket, OscType};
 use self::serde_json::to_string;
-use self::crossbeam_channel::bounded;
 use config::Config;
 use control::ControlMessage;
 use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
@@ -37,8 +37,8 @@ pub fn initialize_osc(
 
     // init the osc thread
     let osc_thread = thread::spawn(move || {
-
-        let command_out = out_cx_tx;
+        // better name
+        let command_tx = out_cx_tx;
 
         // keep track of the remote UI controller using this datastruct
         let mut osc_controller = OSCRemoteControl { address: None };
@@ -59,7 +59,14 @@ pub fn initialize_osc(
                 Ok((size, addr)) => {
                     // println!("osc: Received packet with size {} from: {}", size, addr);
                     let packet = rosc::decoder::decode(&buf[..size]).unwrap();
-                    handle_incoming_packet(packet, addr, &mut osc_controller, &socket, &conf);
+                    handle_incoming_packet(
+                        packet,
+                        addr,
+                        &mut osc_controller,
+                        &socket,
+                        &conf,
+                        command_tx.clone(),
+                    );
                 }
                 Err(e) => {
                     println!("osc: Error receiving from socket: {}", e);
@@ -80,6 +87,7 @@ fn handle_incoming_packet(
     osc_controller: &mut OSCRemoteControl,
     socket: &UdpSocket,
     conf: &Config,
+    command_tx: crossbeam_channel::Sender<ControlMessage>,
 ) {
     match packet {
         OscPacket::Message(msg) => {
@@ -105,6 +113,25 @@ fn handle_incoming_packet(
 
                     // send back the config
                     socket.send_to(&msg_buf, send_to).unwrap();
+                }
+                // track volume
+                // @TODO take care of the message timecodes
+                "/smplr/track/volume" => {
+                    let args = msg.args.unwrap();
+                    // nice way to handle args :D
+                    match (&args[0], &args[1]) {
+                        (OscType::Int(idx), OscType::Float(val)) => {
+                            // build message
+                            let m = ControlMessage::TrackVolume {
+                                tcode: 0,
+                                val: *val,
+                                track_num: *idx as usize,
+                            };
+                            // send
+                            command_tx.try_send(m).unwrap();
+                        }
+                        _ => {}
+                    }
                 }
                 _ => {
                     println!("osc: unimplemented adress: {:?}", msg.addr);
