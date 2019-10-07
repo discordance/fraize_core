@@ -22,8 +22,8 @@ impl StereoExt<f32> for Stereo<f32> {
     //
     fn pan(mut self, val: f32) -> Self {
         let angle = (std::f32::consts::FRAC_PI_2 - 0.0) * ((val - (-1.0)) / (1.0 - (-1.0)));
-        self[0] = self[0] * angle.sin();
-        self[1] = self[1] * angle.cos();
+        self[0] = self[0] * angle.cos();
+        self[1] = self[1] * angle.sin();
         self
     }
 }
@@ -277,8 +277,8 @@ impl AudioMixer {
                         let tr = self.tracks.get_mut(track_num);
                         match tr {
                             Some(t) => {
-                                // set the volume (max 1.2)
-                                t.volume.new_value(val * 1.2);
+                                // set the volume
+                                t.volume.new_value(val);
                             }
                             _ => (),
                         }
@@ -294,7 +294,7 @@ impl AudioMixer {
                         match tr {
                             Some(t) => {
                                 // set the pan
-                                t.pan.new_value_scaled(val, -1.0, 1.0);
+                                t.pan.new_value(val);
                             }
                             _ => (),
                         }
