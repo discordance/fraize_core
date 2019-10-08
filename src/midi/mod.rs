@@ -103,11 +103,13 @@ fn midi_cb(
                                     track_num,
                                 } => {
                                     // broadcast
-                                    let m = ControlMessage::TrackVolume {
+                                    let mut m = ControlMessage::TrackVolume {
                                         tcode: midi_tcode,
                                         val: val_f,
                                         track_num,
                                     };
+                                    // needs a remapping
+                                    m.remap_from_midi();
                                     cx_tx.try_send(m).unwrap();
                                 }
                                 ControlMessage::TrackPan {
@@ -116,11 +118,13 @@ fn midi_cb(
                                     track_num,
                                 } => {
                                     // broadcast
-                                    let m = ControlMessage::TrackPan {
+                                    let mut m = ControlMessage::TrackPan {
                                         tcode: midi_tcode,
                                         val: val_f,
                                         track_num,
                                     };
+                                     // needs a remapping
+                                    m.remap_from_midi();
                                     cx_tx.try_send(m).unwrap();
                                 }
                                 ControlMessage::TrackSampleSelect {
@@ -133,6 +137,7 @@ fn midi_cb(
                                         val: val_f,
                                         track_num,
                                     };
+                                    // no need to remap
                                     cx_tx.try_send(m).unwrap();
                                 }
                             }

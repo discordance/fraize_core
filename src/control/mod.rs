@@ -32,6 +32,30 @@ pub enum ControlMessage {
     },
 }
 
+/// Implement control message helpers
+impl ControlMessage {
+    /// Useful to map value from midi which is usually 0..1 only (midi CC)
+    pub fn remap_from_midi(&mut self) {
+        match self {
+            ControlMessage::TrackVolume{tcode: _, val, track_num: _} => {
+                *val = ControlMessage::map(*val, 0.0, 1.0, 0.0, 1.2);
+            }
+            ControlMessage::TrackPan{tcode: _, val, track_num: _} => {
+                *val = ControlMessage::map(*val, 0.0, 1.0, -1.0, 1.0);
+            }
+            // default case just sets the val
+            _ => {
+                unimplemented!();
+            }
+        }
+    }
+
+    /// map function as in Processing
+    fn map(val: f32, ostart : f32, ostop : f32, nstart : f32, nstop : f32) -> f32 {
+        nstart + (nstop - nstart) * ((val - ostart) / (ostop - ostart))
+    }
+}
+
 /// PlaybackMessage have all data used for sync
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PlaybackMessage {
