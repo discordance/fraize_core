@@ -17,6 +17,8 @@ pub struct SlicerGen {
     cursor: i64,
     /// SliceMode define which kind of positions to use in the slicer
     slicer_mode: super::SliceMode,
+    /// keep in memory the next_loop_div, be able to switch on a new slice
+    next_loop_div: u64,
 }
 
 /// Specific sub SampleGen implementation
@@ -38,6 +40,7 @@ impl SlicerGen {
             pslice: 0,
             cursor: 0,
             slicer_mode: super::SliceMode::Bar16Mode(),
+            next_loop_div: 1,
         }
     }
 
@@ -51,8 +54,8 @@ impl SlicerGen {
         let frames = &self.sample_gen.smartbuf.frames;
         // total number of frames in the buffer
         // let num_frames = frames.len() as i64;
-        let num_frames = self.sample_gen.loop_get_max_frame() i64;
-        
+        let num_frames = self.sample_gen.loop_get_max_frame() as i64;
+
         // number of slices
         let num_slices = positions.len() as i64;
         // how many frames elapsed from the clock point of view
@@ -74,6 +77,11 @@ impl SlicerGen {
 
         // we just suddently jumped to the next slice :)
         if self.pslice != curr_slice as usize {
+            // set loop div to the next
+            // it works with clicks
+            if self.sample_gen.loop_div != self.next_loop_div {
+                self.sample_gen.loop_div = self.next_loop_div;
+            }
             // reset cursor
             self.cursor = 0;
             // update the previous slice
@@ -189,7 +197,8 @@ impl SampleGenerator for SlicerGen {
 
     /// Sets the loop div
     fn set_loop_div(&mut self, loop_div : u64) {
-        self.sample_gen.loop_div = loop_div;
+        // record next loop_div
+        self.next_loop_div = loop_div;
     }
 }
 
