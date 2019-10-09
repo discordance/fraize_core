@@ -1,16 +1,15 @@
 #![allow(dead_code)]
-
-extern crate bus;
 extern crate cpal;
 extern crate sample;
+extern crate crossbeam_channel;
 
 mod filters;
 mod mixer;
 
-use self::bus::BusReader;
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
 use self::sample::frame::Stereo;
 use self::sample::ToFrameSliceMut;
+use control::ControlMessage;
 use std::thread;
 
 use config::Config;
@@ -31,7 +30,7 @@ pub fn loudness(block_out: &[Stereo<f32>]) -> f32 {
 /// Initialize audio machinery
 pub fn initialize_audio(
     conf: Config,
-    hub_rx: BusReader<::control::ControlMessage>,
+    hub_rx: crossbeam_channel::Receiver<ControlMessage>,
 ) -> thread::JoinHandle<()> {
     // init mixer
     let mut mixer = mixer::AudioMixer::new(conf, hub_rx);

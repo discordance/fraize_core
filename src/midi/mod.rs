@@ -1,14 +1,14 @@
-extern crate bus;
 extern crate midir;
 extern crate serde;
 extern crate time;
 extern crate time_calc;
 extern crate wmidi;
+extern crate crossbeam_channel;
 
 use serde::Deserialize;
 use std::thread;
 
-use self::bus::{Bus, BusReader};
+use self::crossbeam_channel::bounded;
 use self::midir::os::unix::VirtualInput;
 use self::midir::MidiInput;
 use self::time_calc::{Ppqn, Ticks};
@@ -66,10 +66,10 @@ impl MidiTime {
 fn midi_cb(
     midi_tcode: u64,
     mid_data: &[u8],
-    cb_data: &mut (Bus<ControlMessage>, MidiTime, Config),
+    cb_data: &mut (crossbeam_channel::Sender<ControlMessage>, MidiTime, Config),
 ) {
     // destructure the tuple
-    let (tx, midi_time, conf) = cb_data;
+    let (cx_tx, midi_time, conf) = cb_data;
 
     // parse raw midi inito a usable message
     let message = MidiMessage::from_bytes(mid_data);
@@ -93,22 +93,24 @@ fn midi_cb(
                         // check if it contains the control
                         if conf.midi_map.cc[&midi_chan_str].contains_key(&cc_num_str) {
                             // clone the CommandMessage
-                            let mut message = conf.midi_map.cc[&midi_chan_str][&cc_num_str].clone();
+                            let message = conf.midi_map.cc[&midi_chan_str][&cc_num_str].clone();
                             // fill in good values and broadcast
                             match message {
                                 ControlMessage::Playback(_) => {}
-                                ControlMessage::TrackGain {
+                                ControlMessage::TrackVolume {
                                     tcode: _,
                                     val: _,
                                     track_num,
                                 } => {
                                     // broadcast
-                                    let m = ControlMessage::TrackGain {
+                                    let mut m = ControlMessage::TrackVolume {
                                         tcode: midi_tcode,
                                         val: val_f,
                                         track_num,
                                     };
-                                    let _res = tx.try_broadcast(m);
+                                    // needs a remapping
+                                    m.remap_from_midi();
+                                    cx_tx.try_send(m).unwrap();
                                 }
                                 ControlMessage::TrackPan {
                                     tcode: _,
@@ -116,12 +118,14 @@ fn midi_cb(
                                     track_num,
                                 } => {
                                     // broadcast
-                                    let m = ControlMessage::TrackPan {
+                                    let mut m = ControlMessage::TrackPan {
                                         tcode: midi_tcode,
                                         val: val_f,
                                         track_num,
                                     };
-                                    let _res = tx.try_broadcast(m);
+                                     // needs a remapping
+                                    m.remap_from_midi();
+                                    cx_tx.try_send(m).unwrap();
                                 }
                                 ControlMessage::TrackSampleSelect {
                                     tcode: _,
@@ -133,7 +137,15 @@ fn midi_cb(
                                         val: val_f,
                                         track_num,
                                     };
-                                    let _res = tx.try_broadcast(m);
+                                    // no need to remap
+                                    cx_tx.try_send(m).unwrap();
+                                }
+                                ControlMessage::TrackLoopDiv {
+                                    tcode: _,
+                                    val: _,
+                                    track_num,
+                                } => {
+                                    unimplemented!();
                                 }
                             }
                         }
@@ -152,29 +164,29 @@ fn midi_cb(
                 MidiMessage::TimingClock => {
                     midi_time.tick(midi_tcode);
                     let message = SyncMessage::Tick(midi_tcode);
-                    tx.broadcast(::control::ControlMessage::Playback(PlaybackMessage {
+                    cx_tx.try_send(::control::ControlMessage::Playback(PlaybackMessage {
                         sync: message,
                         time: midi_time.clone(),
-                    }));
+                    })).unwrap();
                 }
                 // clock start
                 MidiMessage::Start => {
                     midi_time.restart();
                     let message = SyncMessage::Start();
-                    tx.broadcast(::control::ControlMessage::Playback(PlaybackMessage {
+                    cx_tx.try_send(::control::ControlMessage::Playback(PlaybackMessage {
                         sync: message,
                         time: midi_time.clone(),
-                    }));
+                    })).unwrap();
                 }
                 MidiMessage::Continue => {}
                 // clock stop
                 MidiMessage::Stop => {
                     midi_time.restart();
                     let message = SyncMessage::Stop();
-                    tx.broadcast(::control::ControlMessage::Playback(PlaybackMessage {
+                    cx_tx.try_send(::control::ControlMessage::Playback(PlaybackMessage {
                         sync: message,
                         time: midi_time.clone(),
-                    }));
+                    })).unwrap();
                 }
                 MidiMessage::ActiveSensing => {}
                 MidiMessage::Reset => {}
@@ -186,17 +198,14 @@ fn midi_cb(
 }
 
 // initialize midi machinery
-pub fn initialize_midi(conf: Config) -> (thread::JoinHandle<()>, BusReader<ControlMessage>) {
+pub fn initialize_midi(conf: Config) -> (thread::JoinHandle<()>, crossbeam_channel::Receiver<ControlMessage>) {
     // init the control bus
-    let mut control_bus = ::control::initialize_control();
-    // bus channel to communicate from the midi callback to audio tracks
-    let outer_rx = control_bus.add_rx();
+    let (cx_tx, cx_rx) = bounded::<ControlMessage>(1024);
 
     // initialize in its own thread
     let midi_thread = thread::spawn(move || {
         // bus channel to communicate from the midi callback to this thread safely
-        let mut inner_bus = Bus::new(128);
-        let mut inner_rx = inner_bus.add_rx();
+        let (i_cx_tx, i_cx_rx) = bounded::<ControlMessage>(1024);
 
         // mutable midi time
         let midi_time = MidiTime {
@@ -214,7 +223,7 @@ pub fn initialize_midi(conf: Config) -> (thread::JoinHandle<()>, BusReader<Contr
         let input = MidiInput::new("Smplr").expect("midi: Couldn't open midi input");
 
         // we need to move a lot of stuff in our midi
-        let data_tup = (inner_bus, midi_time, conf);
+        let data_tup = (i_cx_tx, midi_time, conf);
         // take first port
         // let port_name = input.port_name(0).expect("Couldn't get midi port");
 
@@ -227,9 +236,9 @@ pub fn initialize_midi(conf: Config) -> (thread::JoinHandle<()>, BusReader<Contr
         // infinite loop in this thread, blocked by channel receiver
         loop {
             // receive form channel
-            let message = inner_rx.recv().unwrap();
+            let message = i_cx_rx.recv().unwrap();
 
-            let res = control_bus.try_broadcast(message);
+            let res = cx_tx.try_send(message);
             match res {
                 Ok(_) => {}
                 Err(e) => {
@@ -240,5 +249,5 @@ pub fn initialize_midi(conf: Config) -> (thread::JoinHandle<()>, BusReader<Contr
     });
 
     // return thread
-    return (midi_thread, outer_rx);
+    return (midi_thread, cx_rx);
 }

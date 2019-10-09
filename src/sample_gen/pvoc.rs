@@ -322,6 +322,11 @@ impl SampleGenerator for PVOCGen {
         self.sample_gen.sync_reset();
         self.pvoc_1.reset();
     }
+
+    /// Sets the loop div
+    fn set_loop_div(&mut self, loop_div : u64) {
+        self.sample_gen.loop_div = loop_div;
+    }
 }
 
 /// Implement `Iterator` for `RePitchGen`.

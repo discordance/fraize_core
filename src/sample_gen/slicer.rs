@@ -184,6 +184,11 @@ impl SampleGenerator for SlicerGen {
         self.pslice = self.sample_gen.smartbuf.slices[&self.slicer_mode].len() - 1;
         self.cursor = 0;
     }
+
+    /// Sets the loop div
+    fn set_loop_div(&mut self, loop_div : u64) {
+        self.sample_gen.loop_div = loop_div;
+    }
 }
 
 /// Implement `Iterator` for `RePitchGen`.

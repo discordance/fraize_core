@@ -1,9 +1,8 @@
 //! Audio Mixer defines structs and traits useful for sampler routing.
 //! This is intended to be as modular as it can be.
-extern crate bus;
 extern crate sample;
+extern crate crossbeam_channel;
 
-use self::bus::BusReader;
 use self::sample::frame::{Frame, Stereo};
 
 use config::{Config, TrackType};
@@ -12,6 +11,7 @@ use sample_gen::repitch::RePitchGen;
 use sample_gen::slicer::SlicerGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
 use sampling::SampleLib;
+use control::ControlMessage;
 
 /// extending the Stereo Trait for additional mixing power
 pub trait StereoExt<F32> {
@@ -22,8 +22,8 @@ impl StereoExt<f32> for Stereo<f32> {
     //
     fn pan(mut self, val: f32) -> Self {
         let angle = (std::f32::consts::FRAC_PI_2 - 0.0) * ((val - (-1.0)) / (1.0 - (-1.0)));
-        self[0] = self[0] * angle.sin();
-        self[1] = self[1] * angle.cos();
+        self[0] = self[0] * angle.cos();
+        self[1] = self[1] * angle.sin();
         self
     }
 }
@@ -36,8 +36,8 @@ struct AudioTrack {
     /// As we are using cpal, we dont know yet how to size it at init.
     /// A first audio round is necessary to get the size
     audio_buffer: Vec<Stereo<f32>>,
-    /// Gain is the gain value of the track, pre effects, smoothed
-    gain: ::control::SmoothParam,
+    /// Volume is the volume value of the track, pre effects, smoothed
+    volume: ::control::SmoothParam,
     /// Pan is the panning value of the track, pre effects, smoothed
     pan: ::control::SmoothParam,
     /// Bank index (track-locked)
@@ -57,7 +57,7 @@ impl AudioTrack {
             // we still dont know how much the buffer wants.
             // let's init at 512 and extend later.
             audio_buffer: Vec::with_capacity(512),
-            gain: ::control::SmoothParam::new(0.0, 1.0),
+            volume: ::control::SmoothParam::new(0.0, 1.0),
             pan: ::control::SmoothParam::new(0.0, 0.0),
             sample_select: ::control::DirectionalParam::new(0.0, 0.0),
             bank,
@@ -115,6 +115,11 @@ impl AudioTrack {
         self.generator.sync(global_tempo, tick);
     }
 
+    /// set loop div
+    fn set_loop_div(&mut self, loop_div: u64) {
+        self.generator.set_loop_div(loop_div);
+    }
+
     /// process and fill next block of audio.
     fn fill_next_block(&mut self, size: usize) {
         // first check if the buffer is init
@@ -145,13 +150,13 @@ pub struct AudioMixer {
     /// Clock ticks are counted here to keep sync with tracks
     clock_ticks: u64,
     /// Command bus reader. Lockless bus to read command messages
-    command_rx: BusReader<::control::ControlMessage>,
+    command_rx: crossbeam_channel::Receiver<ControlMessage>,
 }
 
 /// AudioMixer implementation.
 impl AudioMixer {
     /// init a new mixer, a lot of heavy lifting here
-    pub fn new(conf: Config, command_rx: BusReader<::control::ControlMessage>) -> Self {
+    pub fn new(conf: Config, command_rx: crossbeam_channel::Receiver<ControlMessage>) -> Self {
         // init the sample lib, crash of err
         let sample_lib = ::sampling::init_lib(conf.clone())
             .expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT in conf ?");
@@ -161,19 +166,19 @@ impl AudioMixer {
         for t in conf.tracks.iter() {
             match t {
                 TrackType::RePitchGen { bank } => {
-                    let mut gen = RePitchGen::new();
+                    let gen = RePitchGen::new();
                     let mut track = AudioTrack::new(Box::new(gen), *bank);
                     track.load_first_buffer(&sample_lib);
                     tracks.push(track);
                 }
                 TrackType::SlicerGen { bank } => {
-                    let mut gen = SlicerGen::new();
+                    let gen = SlicerGen::new();
                     let mut track = AudioTrack::new(Box::new(gen), *bank);
                     track.load_first_buffer(&sample_lib);
                     tracks.push(track);
                 }
                 TrackType::PVOCGen { bank } => {
-                    let mut gen = PVOCGen::new();
+                    let gen = PVOCGen::new();
                     let mut track = AudioTrack::new(Box::new(gen), *bank);
                     track.load_first_buffer(&sample_lib);
                     tracks.push(track);
@@ -214,8 +219,8 @@ impl AudioMixer {
             for track in self.tracks.iter_mut() {
                 let mut frame = track.get_frame(i);
 
-                // gain stage
-                frame = frame.scale_amp(track.gain.get_param(buff_size));
+                // volume stage
+                frame = frame.scale_amp(track.volume.get_param(buff_size));
 
                 // pan stage
                 frame = frame.pan(track.pan.get_param(buff_size));
@@ -233,7 +238,8 @@ impl AudioMixer {
     }
 
     /// Reads commands from the bus.
-    /// Must iterate to consume all messages at one buffer cycle.
+    /// Must iterate to consume all messages for one buffer cycle util its empty.
+    /// This is not fetching commands at sample level.
     fn fetch_commands(&mut self) {
         loop {
             match self.command_rx.try_recv() {
@@ -267,8 +273,8 @@ impl AudioMixer {
                         }
                         //            println!("change sample on track {}", track_num);
                     }
-                    // Gain
-                    ::control::ControlMessage::TrackGain {
+                    // Volume
+                    ::control::ControlMessage::TrackVolume {
                         tcode: _,
                         val,
                         track_num,
@@ -277,13 +283,13 @@ impl AudioMixer {
                         let tr = self.tracks.get_mut(track_num);
                         match tr {
                             Some(t) => {
-                                // set the gain (max 1.2)
-                                t.gain.new_value(val * 1.2);
+                                // set the volume
+                                t.volume.new_value(val);
                             }
                             _ => (),
                         }
                     }
-                    // Gain
+                    // Pan
                     ::control::ControlMessage::TrackPan {
                         tcode: _,
                         val,
@@ -293,8 +299,24 @@ impl AudioMixer {
                         let tr = self.tracks.get_mut(track_num);
                         match tr {
                             Some(t) => {
-                                // set the gain (max 1.2)
-                                t.pan.new_value_scaled(val, -1.0, 1.0);
+                                // set the pan
+                                t.pan.new_value(val);
+                            }
+                            _ => (),
+                        }
+                    }
+                    // LoopDiv
+                    ::control::ControlMessage::TrackLoopDiv {
+                        tcode: _,
+                        val,
+                        track_num,
+                    } => {
+                        // check if tracknum is around
+                        let tr = self.tracks.get_mut(track_num);
+                        match tr {
+                            Some(t) => {
+                                // set the loop div
+                                t.set_loop_div(val);
                             }
                             _ => (),
                         }
