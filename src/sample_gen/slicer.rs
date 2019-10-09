@@ -50,7 +50,9 @@ impl SlicerGen {
         // all frames
         let frames = &self.sample_gen.smartbuf.frames;
         // total number of frames in the buffer
-        let num_frames = frames.len() as i64;
+        // let num_frames = frames.len() as i64;
+        let num_frames = self.sample_gen.loop_get_max_frame() i64;
+        
         // number of slices
         let num_slices = positions.len() as i64;
         // how many frames elapsed from the clock point of view
