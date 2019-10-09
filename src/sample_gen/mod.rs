@@ -176,7 +176,10 @@ struct SampleGen {
     /// playback_mult is a factor of the playback_rate that can be twisted for fun and profit.
     playback_mult: u64,
     /// loop_div is a div factor to reduce loop size in the buffer (a looping a part of the total available samples). defaults to 1.
+    /// should not be activated directly because of clicks
     loop_div: u64,
+    /// next loop div that is ready to activate when a beat hit. each sample generator variant is responsible of handling this.
+    next_loop_div: u64,
     /// loop_offset is an offset to start looping after the real sample start.
     /// this value is relative to the loop_div. the real offset is loop_offset*loop_div.
     /// defaults to zero
@@ -254,6 +257,15 @@ impl SampleGen {
 
         // convert to samples, in original tempo ofc
         Beats(num_beats_divided as i64).samples(self.smartbuf.original_tempo, 44_100.0) as u64
+    }
+
+    /// Is this frame a beat frame
+    fn is_beat_frame(&self) -> bool {
+        let beat_samples = Beats(1).samples(self.smartbuf.original_tempo, 44_100.0) as u64;
+        if self.frame_index % beat_samples == 0 {
+            return true;
+        }
+        false
     }
 }
 

@@ -17,8 +17,6 @@ pub struct SlicerGen {
     cursor: i64,
     /// SliceMode define which kind of positions to use in the slicer
     slicer_mode: super::SliceMode,
-    /// keep in memory the next_loop_div, be able to switch on a new slice
-    next_loop_div: u64,
 }
 
 /// Specific sub SampleGen implementation
@@ -31,6 +29,7 @@ impl SlicerGen {
                 frame_index: 0,
                 playback_mult: 0,
                 loop_div: 1,
+                next_loop_div: 1,
                 loop_offset: 0,
                 playing: false,
                 smartbuf: SmartBuffer::new_empty(),
@@ -40,7 +39,6 @@ impl SlicerGen {
             pslice: 0,
             cursor: 0,
             slicer_mode: super::SliceMode::Bar16Mode(),
-            next_loop_div: 1,
         }
     }
 
@@ -77,10 +75,10 @@ impl SlicerGen {
 
         // we just suddently jumped to the next slice :)
         if self.pslice != curr_slice as usize {
-            // set loop div to the next
+            // set loop div to the next slice
             // it works with clicks
-            if self.sample_gen.loop_div != self.next_loop_div {
-                self.sample_gen.loop_div = self.next_loop_div;
+            if self.sample_gen.loop_div != self.sample_gen.next_loop_div {
+                self.sample_gen.loop_div = self.sample_gen.next_loop_div;
             }
             // reset cursor
             self.cursor = 0;
@@ -198,7 +196,7 @@ impl SampleGenerator for SlicerGen {
     /// Sets the loop div
     fn set_loop_div(&mut self, loop_div : u64) {
         // record next loop_div
-        self.next_loop_div = loop_div;
+        self.sample_gen.next_loop_div = loop_div;
     }
 }
 
