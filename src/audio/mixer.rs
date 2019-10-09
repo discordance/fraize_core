@@ -115,6 +115,11 @@ impl AudioTrack {
         self.generator.sync(global_tempo, tick);
     }
 
+    /// set loop div
+    fn set_loop_div(&mut self, loop_div: u64) {
+        self.generator.set_loop_div(loop_div);
+    }
+
     /// process and fill next block of audio.
     fn fill_next_block(&mut self, size: usize) {
         // first check if the buffer is init
@@ -233,7 +238,8 @@ impl AudioMixer {
     }
 
     /// Reads commands from the bus.
-    /// Must iterate to consume all messages at one buffer cycle.
+    /// Must iterate to consume all messages for one buffer cycle util its empty.
+    /// This is not fetching commands at sample level.
     fn fetch_commands(&mut self) {
         loop {
             match self.command_rx.try_recv() {
@@ -295,6 +301,22 @@ impl AudioMixer {
                             Some(t) => {
                                 // set the pan
                                 t.pan.new_value(val);
+                            }
+                            _ => (),
+                        }
+                    }
+                    // LoopDiv
+                    ::control::ControlMessage::TrackLoopDiv {
+                        tcode: _,
+                        val,
+                        track_num,
+                    } => {
+                        // check if tracknum is around
+                        let tr = self.tracks.get_mut(track_num);
+                        match tr {
+                            Some(t) => {
+                                // set the loop div
+                                t.set_loop_div(val);
                             }
                             _ => (),
                         }

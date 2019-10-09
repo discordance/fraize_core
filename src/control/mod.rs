@@ -30,6 +30,12 @@ pub enum ControlMessage {
         val: f32,
         track_num: usize,
     },
+    /// Track Pan
+    TrackLoopDiv {
+        tcode: u64,
+        val: u64,
+        track_num: usize,
+    },
 }
 
 /// Implement control message helpers

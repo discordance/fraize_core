@@ -140,6 +140,13 @@ fn midi_cb(
                                     // no need to remap
                                     cx_tx.try_send(m).unwrap();
                                 }
+                                ControlMessage::TrackLoopDiv {
+                                    tcode: _,
+                                    val: _,
+                                    track_num,
+                                } => {
+                                    unimplemented!();
+                                }
                             }
                         }
                     }

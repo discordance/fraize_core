@@ -150,6 +150,23 @@ fn handle_incoming_packet(
                         _ => {}
                     }
                 }
+                "/smplr/track/loop_div" => {
+                    let args = msg.args.unwrap();
+                    // nice way to handle args :D
+                    match (&args[0], &args[1]) {
+                        (OscType::Int(idx), OscType::Int(val)) => {
+                            // build message
+                            let m = ControlMessage::TrackLoopDiv {
+                                tcode: 0,
+                                val: *val as u64,
+                                track_num: *idx as usize,
+                            };
+                            // send
+                            command_tx.try_send(m).unwrap();
+                        }
+                        _ => {}
+                    }
+                }
                 _ => {
                     println!("osc: unimplemented adress: {:?}", msg.addr);
                 }

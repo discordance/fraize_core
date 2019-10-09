@@ -210,7 +210,7 @@ impl SampleGen {
 
         // fade in / out
         next_frame = match self.sync_cursor {
-            0...NOCLICK_FADE_LENGTH => next_frame.scale_amp(gen_utils::fade_out(
+            0..=NOCLICK_FADE_LENGTH => next_frame.scale_amp(gen_utils::fade_out(
                 self.sync_cursor as i64,
                 NOCLICK_FADE_LENGTH as i64,
                 NOCLICK_FADE_LENGTH as i64,
@@ -252,8 +252,6 @@ impl SampleGen {
             num_beats_divided = 1;
         }
 
-        //    println!("dave {} {}", num_beats_divided, self.loop_div);
-
         // convert to samples, in original tempo ofc
         Beats(num_beats_divided as i64).samples(self.smartbuf.original_tempo, 44_100.0) as u64
     }
@@ -277,4 +275,6 @@ pub trait SampleGenerator {
     fn set_playback_mult(&mut self, playback_mult: u64);
     /// Resets the SampleGenerator playback to start position.
     fn reset(&mut self);
+    /// Sets the loop div
+    fn set_loop_div(&mut self, loop_div : u64);
 }
