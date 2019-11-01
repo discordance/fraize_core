@@ -3,7 +3,7 @@ extern crate time_calc;
 
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
-use self::time_calc::{Ticks, Beats};
+use self::time_calc::{Beats, Ticks};
 
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 
@@ -59,7 +59,6 @@ impl RePitchGen {
                 smartbuf: SmartBuffer::new_empty(),
                 sync_cursor: 0,
                 sync_next_frame_index: 0,
-                
             },
             interpolation: LinInterp {
                 interp_val: 0.0,
@@ -104,7 +103,8 @@ impl SampleGenerator for RePitchGen {
         let clock_frames = Ticks(tick as i64).samples(original_tempo, PPQN, 44_100.0) as u64;
 
         // we want to resync for each beat
-        let beat_samples = Beats(1).samples(self.sample_gen.smartbuf.original_tempo, 44_100.0) as u64;
+        let beat_samples =
+            Beats(1).samples(self.sample_gen.smartbuf.original_tempo, 44_100.0) as u64;
         let is_beat = clock_frames % beat_samples == 0;
 
         // calculates the new playback rate
@@ -147,7 +147,7 @@ impl SampleGenerator for RePitchGen {
     }
 
     /// Sets the loop div
-    fn set_loop_div(&mut self, loop_div : u64) {
+    fn set_loop_div(&mut self, loop_div: u64) {
         // record next loop_div
         self.sample_gen.next_loop_div = loop_div;
     }
@@ -160,7 +160,6 @@ impl Iterator for RePitchGen {
 
     /// Next computes the next frame and returns a Stereo<f32>
     fn next(&mut self) -> Option<Self::Item> {
-
         // loop div activation
         if self.sample_gen.is_beat_frame() {
             if self.sample_gen.next_loop_div != self.sample_gen.loop_div {

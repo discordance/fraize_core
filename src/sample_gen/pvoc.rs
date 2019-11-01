@@ -284,12 +284,13 @@ impl SampleGenerator for PVOCGen {
         let clock_frames = Ticks(tick as i64).samples(original_tempo, PPQN, 44_100.0) as u64;
 
         // we want to resync for each beat
-        let beat_samples = Beats(1).samples(self.sample_gen.smartbuf.original_tempo, 44_100.0) as u64;
+        let beat_samples =
+            Beats(1).samples(self.sample_gen.smartbuf.original_tempo, 44_100.0) as u64;
         let is_beat = clock_frames % beat_samples == 0;
 
         // calculates the new playback rate
         let new_rate = global_tempo as f64 / original_tempo;
-        
+
         // has the tempo changed ? update accordingly
         if self.sample_gen.playback_rate != new_rate || is_beat {
             // simple update
@@ -329,7 +330,7 @@ impl SampleGenerator for PVOCGen {
     }
 
     /// Sets the loop div
-    fn set_loop_div(&mut self, loop_div : u64) {
+    fn set_loop_div(&mut self, loop_div: u64) {
         self.sample_gen.next_loop_div = loop_div;
     }
 }

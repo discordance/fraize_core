@@ -5,18 +5,91 @@ use self::sample::frame::Stereo;
 use self::sample::Frame;
 use self::time_calc::Ticks;
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
+use std::collections::HashMap;
+
+/// A Slice struct
+/// should be copied
+#[derive(Debug, Default, Copy, Clone)]
+struct Slice {
+    /// start sample index in the buffer
+    start: usize,
+    /// end sample index in the buffer
+    end: usize,
+    /// cursor is the current position in the slice
+    cursor: usize,
+}
+
+impl Slice {
+    /// get the next frame at cursor
+    /// if the cursor is consumed, return the zero frame
+    fn next_frame(&mut self, frames: &[Stereo<f32>]) -> Stereo<f32> {
+        if !self.is_consumed() {
+            // get the frame index cursor
+            let frame_index = self.cursor + self.start;
+
+            // increment cursor
+            self.cursor += 1;
+
+            // safely grab a new frame
+            let new_frame = frames.get(frame_index);
+            match new_frame {
+                None => {
+                    println!("out of slice bound");
+                    return Stereo::<f32>::equilibrium();
+                }
+                Some(f) => return *f,
+            }
+        }
+        Stereo::<f32>::equilibrium()
+    }
+
+    /// the cursor is consumed
+    fn is_consumed(&self) -> bool {
+        self.cursor > self.end
+    }
+}
+
+/// A Slice Sequencer
+/// Usefull to order and re-order the slices in any order
+/// Hashmap Keys are the sample index of the start slices at original playback speed
+/// By default the order given by the sample position
+#[derive(Debug, Clone)]
+struct SliceSeq {
+    /// Positions mode define which kind of positions to use in the slicer
+    positions_mode: super::PositionsMode,
+    /// Slice ordered according to the keys
+    slices: HashMap<usize, Slice>,
+    /// curently playing slice that will be consumed
+    current_slice: Slice,
+}
+
+impl SliceSeq {
+    /// inits the sequencer from the smart buffer
+    fn init_from_buffer(&mut self, buffer: &SmartBuffer) {
+        let positions = &buffer.positions[&self.positions_mode];
+
+        // cleared but memory is kept
+        self.slices.clear();
+
+        // iterate and set
+        for (idx, pos) in positions.windows(2).enumerate() {
+            println!("{:?} ", pos);
+            self.slices.insert(pos[0], Slice{
+                start: pos[0],
+                end: pos[1]-1, // can't fail
+                cursor: 0
+            });
+        }
+    }
+}
 
 /// Slicer sample generator.
 /// Use a method inspired by Beat Slicers.
 pub struct SlicerGen {
     /// parent SampleGen struct, as struct composition.
     sample_gen: SampleGen,
-    /// Keeps track of previous slice
-    pslice: usize,
-    /// Cursor is the playhead relative to the current slice
-    cursor: i64,
-    /// SliceMode define which kind of positions to use in the slicer
-    slicer_mode: super::SliceMode,
+    /// Slice Sequencer
+    slice_seq: SliceSeq,
 }
 
 /// Specific sub SampleGen implementation
@@ -36,85 +109,113 @@ impl SlicerGen {
                 sync_cursor: 0,
                 sync_next_frame_index: 0,
             },
-            pslice: 0,
-            cursor: 0,
-            slicer_mode: super::SliceMode::Bar16Mode(),
+            slice_seq: SliceSeq {
+                slices: HashMap::with_capacity(64), // is it useful ?
+                current_slice: Default::default(),
+                positions_mode: super::PositionsMode::Bar4Mode(),
+            },
         }
     }
 
-    /// Main Logic of Slicer computing the nextframe
-    ///
+    /// return new positions bounds to play with slices in a creative way
+//    fn get_position_bounds(&self) -> (usize, usize) {
+//        // get positions
+//        let positions = &self.sample_gen.smartbuf.positions[&self.positions_mode];
+//        // compute the number of allowed slices via loop div
+//        let new_len = positions.len() / self.sample_gen.loop_div as usize;
+//
+//        (0, new_len)
+//    }
+
+    /// Main logic of Slicer computing the nextframe using the slice seq
     fn slicer_next_frame(&mut self) -> Stereo<f32> {
-        // slice positions ref
-        // depends on slicer mode
-        let positions = &self.sample_gen.smartbuf.slices[&self.slicer_mode];
-        // all frames
-        let frames = &self.sample_gen.smartbuf.frames;
-        // total number of frames in the buffer
-        // let num_frames = frames.len() as i64;
-        let num_frames = self.sample_gen.loop_get_max_frame() as i64;
+        // compute the frame index as given by the clock
+        let frame_index = self.sample_gen.frame_index;
 
-        // number of slices
-        let num_slices = positions.len() as i64;
-        // how many frames elapsed from the clock point of view
-        let clock_frames = self.sample_gen.frame_index as i64;
-        // current cycle, i.e n rotations of full smart buffer
-        let cycle = (clock_frames as f32 / num_frames as f32) as i64;
+//        println!("{} ", frame_index);
 
-        // compute next slice
-        let next_slice = match positions
-            .iter()
-            .position(|&x| x as i64 + (cycle * num_frames) > clock_frames)
-        {
-            Some(idx) => idx,
-            None => 0,
-        };
-
-        // compute curr slice
-        let curr_slice = (next_slice as i64 - 1) % num_slices;
-
-        // we just suddently jumped to the next slice :)
-        if self.pslice != curr_slice as usize {
-            // set loop div to the next slice
-            // it works with clicks
-            if self.sample_gen.loop_div != self.sample_gen.next_loop_div {
-                self.sample_gen.loop_div = self.sample_gen.next_loop_div;
-            }
-            // reset cursor
-            self.cursor = 0;
-            // update the previous slice
-            self.pslice = curr_slice as usize;
-        }
-
-        // compute this current slice len in samples
-        let slice_len = positions[next_slice as usize] - positions[curr_slice as usize];
-
-        // init nextframe with silence
-        let mut next_frame = Stereo::<f32>::equilibrium();
-
-        // checj if we have still samples to read in this slice ?
-        if (slice_len as i64 - self.cursor) > 0 {
-            // get the right index in buffer
-            let mut findex = self.cursor as u64 + positions[curr_slice as usize];
-
-            // dont overflow the buffer with wrapping
-            findex = findex % num_frames as u64;
-
-            // get next frame, apply fade in/out slopes
-            next_frame = frames[findex as usize]
-                .scale_amp(super::gen_utils::fade_in(self.cursor, 64))
-                .scale_amp(super::gen_utils::fade_out(
-                    self.cursor,
-                    1024 * 2,
-                    slice_len as i64,
-                ))
-                .scale_amp(1.45); // factor that balance with other sample gen types
-
-            self.cursor += 1;
-        }
-
-        return next_frame;
+        Stereo::<f32>::equilibrium()
     }
+
+    //    /// Main Logic of Slicer computing the nextframe
+    //    fn slicer_next_frame_old(&mut self) -> Stereo<f32> {
+    //        // slice pis bounds
+    //        let bounds = self.get_position_bounds();
+    //
+    //        // get original positions
+    //        let positions = &self.sample_gen.smartbuf.positions[&self.positions_mode][..];
+    //        // apply bounds
+    //        let positions = &positions[bounds.0..bounds.1];
+    //
+    //        // all frames
+    //        let frames = &self.sample_gen.smartbuf.frames;
+    //
+    //        // total number of frames in the buffer
+    //        // let num_frames = frames.len() as i64;
+    //        let num_frames = self.sample_gen.loop_get_max_frame() as i64;
+    //
+    //        // number of slices
+    //        let num_slices = positions[bounds.0..bounds.1].len() as i64;
+    //        // how many frames elapsed from the clock point of view
+    //        // because the frame_index is ALWAYS in sync with the ticks
+    //        let clock_frames = self.sample_gen.frame_index as i64;
+    //        // current cycle, i.e n rotations of full smart buffer
+    //        let cycle = (clock_frames as f32 / num_frames as f32) as i64;
+    //
+    //        // compute next slice
+    //        let next_slice = match positions
+    //            .iter()
+    //            .position(|&x| x as i64 + (cycle * num_frames) > clock_frames)
+    //        {
+    //            Some(idx) => idx,
+    //            None => 0,
+    //        };
+    //
+    //        // compute curr slice
+    //        let curr_slice = (next_slice as i64 - 1) % num_slices;
+    //
+    //        // we just suddently jumped to the next slice :)
+    //        if self.pslice != curr_slice as usize {
+    //            // set loop div to the next slice
+    //            // it works with clicks
+    //            if self.sample_gen.loop_div != self.sample_gen.next_loop_div {
+    //                self.sample_gen.loop_div = self.sample_gen.next_loop_div;
+    //            }
+    //            // reset cursor
+    //            self.cursor = 0;
+    //            // update the previous slice
+    //            self.pslice = curr_slice as usize;
+    //        }
+    //
+    //        // compute this current slice len in samples
+    //        let slice_len = positions[next_slice as usize] - positions[curr_slice as usize];
+    //
+    //        // init nextframe with silence
+    //        let mut next_frame = Stereo::<f32>::equilibrium();
+    //
+    //        // checj if we have still samples to read in this slice ?
+    //        if (slice_len as i64 - self.cursor) > 0 {
+    //            // get the right index in buffer
+    //            let mut findex = self.cursor as u64 + positions[curr_slice as usize];
+    //
+    //            // dont overflow the buffer with wrapping
+    //            findex = findex % num_frames as u64;
+    //
+    //            // get next frame, apply fade in/out slopes
+    //            next_frame = frames[findex as usize]
+    //                .scale_amp(super::gen_utils::fade_in(self.cursor, 64))
+    //                .scale_amp(super::gen_utils::fade_out(
+    //                    self.cursor,
+    //                    1024 * 2,
+    //                    slice_len as i64,
+    //                ))
+    //                .scale_amp(1.45); // factor that balance with other sample gen types
+    //
+    //            self.cursor += 1;
+    //        }
+    //
+    //        return next_frame;
+    //    }
 }
 
 /// SampleGenerator implementation for SlicerGen
@@ -140,20 +241,21 @@ impl SampleGenerator for SlicerGen {
 
     /// Loads a SmartBuffer, moving it
     fn load_buffer(&mut self, smartbuf: &SmartBuffer) {
-        // simply move in the buffer
+        // simply clone in the buffer
         self.sample_gen.smartbuf = smartbuf.clone();
-        // init the previous slice
-        self.pslice = self.sample_gen.smartbuf.slices[&self.slicer_mode].len() - 1;
+        self.slice_seq.init_from_buffer(smartbuf);
     }
 
-    /// Sync the slicer according to global values
+    /// Sync the slicer according to a clock
     fn sync(&mut self, global_tempo: u64, tick: u64) {
         // calculate elapsed clock frames according to the original tempo
         let original_tempo = self.sample_gen.smartbuf.original_tempo;
         let clock_frames = Ticks(tick as i64).samples(original_tempo, PPQN, 44_100.0) as u64;
 
         // ALWAYS set the frameindex relative to the mixer ticks
-        self.sample_gen.frame_index = clock_frames;
+        self.sample_gen.frame_index = clock_frames % self.sample_gen.loop_get_max_frame() as u64;
+
+        println!("{} {}", self.sample_gen.loop_get_max_frame(), self.sample_gen.smartbuf.frames.len());
 
         // calculates the new playback rate
         let new_rate = global_tempo as f64 / original_tempo;
@@ -186,15 +288,10 @@ impl SampleGenerator for SlicerGen {
     }
 
     /// resets Sample Generator to start position.
-    fn reset(&mut self) {
-        // here is useless to reset the frame index as it closely follows the mixer ticks
-        // self.sample_gen.frame_index = 0;
-        self.pslice = self.sample_gen.smartbuf.slices[&self.slicer_mode].len() - 1;
-        self.cursor = 0;
-    }
+    fn reset(&mut self) {}
 
     /// Sets the loop div
-    fn set_loop_div(&mut self, loop_div : u64) {
+    fn set_loop_div(&mut self, loop_div: u64) {
         // record next loop_div
         self.sample_gen.next_loop_div = loop_div;
     }
