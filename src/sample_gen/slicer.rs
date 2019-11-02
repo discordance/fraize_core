@@ -5,7 +5,7 @@ use self::sample::frame::Stereo;
 use self::sample::Frame;
 use self::time_calc::Ticks;
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// A Slice struct
 /// should be copied
@@ -45,7 +45,12 @@ impl Slice {
 
     /// the cursor is consumed
     fn is_consumed(&self) -> bool {
-        self.cursor > self.end
+        self.cursor > self.len()
+    }
+
+    /// get slice len
+    fn len(&self) -> usize {
+        return self.end - self.start;
     }
 }
 
@@ -58,7 +63,7 @@ struct SliceSeq {
     /// Positions mode define which kind of positions to use in the slicer
     positions_mode: super::PositionsMode,
     /// Slice ordered according to the keys
-    slices: HashMap<usize, Slice>,
+    slices: BTreeMap<usize, Slice>,
     /// curently playing slice that will be consumed
     current_slice: Slice,
 }
@@ -73,13 +78,50 @@ impl SliceSeq {
 
         // iterate and set
         for (idx, pos) in positions.windows(2).enumerate() {
-            println!("{:?} ", pos);
-            self.slices.insert(pos[0], Slice{
-                start: pos[0],
-                end: pos[1]-1, // can't fail
-                cursor: 0
-            });
+            self.slices.insert(
+                pos[0],
+                Slice {
+                    start: pos[0],
+                    end: pos[1] - 1, // can't fail
+                    cursor: 0,
+                },
+            );
         }
+
+        // init the first slice
+        self.current_slice = *self.slices.get(&0).unwrap();
+
+        println!("{:?}", self.current_slice);
+    }
+
+    /// get next frame according to the given frame index at seq level
+    fn next_frame(&mut self, frame_index: u64, frames: &[Stereo<f32>]) -> Stereo<f32> {
+        // grab the next frame
+        let next_frame = self.current_slice.next_frame(frames);
+
+        // perform the next slice computation
+        // give a nice ordered list of start slices
+        let mut kz = self.slices.keys();
+
+        // elegant and ugly at the same time
+        // find the first slice index in sample that is just above the frame_index
+        let curr_slice_idx = kz.rev().find(|s| **s <= frame_index as usize);
+
+        // check the curr_slice_idx, if none, it is the last
+        let curr_slice = match curr_slice_idx {
+            None => self.slices.values().last().unwrap(),
+            Some(idx) => self.slices.get(idx).unwrap(),
+        };
+
+        // current slice is consumable so we need to check if its not already the same one
+        // @TODO doesnt allows for repeats
+        if self.current_slice.start != curr_slice.start {
+//            println!("{}", frame_index);
+            self.current_slice = *curr_slice;
+        };
+
+        // return next frame
+        next_frame
     }
 }
 
@@ -110,31 +152,19 @@ impl SlicerGen {
                 sync_next_frame_index: 0,
             },
             slice_seq: SliceSeq {
-                slices: HashMap::with_capacity(64), // is it useful ?
+                slices: BTreeMap::new(), // is it useful to pre-allocate?
                 current_slice: Default::default(),
-                positions_mode: super::PositionsMode::Bar4Mode(),
+                positions_mode: super::PositionsMode::Bar16Mode(),
             },
         }
     }
-
-    /// return new positions bounds to play with slices in a creative way
-//    fn get_position_bounds(&self) -> (usize, usize) {
-//        // get positions
-//        let positions = &self.sample_gen.smartbuf.positions[&self.positions_mode];
-//        // compute the number of allowed slices via loop div
-//        let new_len = positions.len() / self.sample_gen.loop_div as usize;
-//
-//        (0, new_len)
-//    }
 
     /// Main logic of Slicer computing the nextframe using the slice seq
     fn slicer_next_frame(&mut self) -> Stereo<f32> {
         // compute the frame index as given by the clock
         let frame_index = self.sample_gen.frame_index;
 
-//        println!("{} ", frame_index);
-
-        Stereo::<f32>::equilibrium()
+        self.slice_seq.next_frame(frame_index, &self.sample_gen.smartbuf.frames)
     }
 
     //    /// Main Logic of Slicer computing the nextframe
@@ -255,8 +285,7 @@ impl SampleGenerator for SlicerGen {
         // ALWAYS set the frameindex relative to the mixer ticks
         self.sample_gen.frame_index = clock_frames % self.sample_gen.loop_get_max_frame() as u64;
 
-        println!("{} {}", self.sample_gen.loop_get_max_frame(), self.sample_gen.smartbuf.frames.len());
-
+        //        println!("{} {}", self.sample_gen.loop_get_max_frame(), self.sample_gen.smartbuf.frames.len());
         // calculates the new playback rate
         let new_rate = global_tempo as f64 / original_tempo;
 
