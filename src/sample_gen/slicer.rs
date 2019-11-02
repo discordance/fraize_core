@@ -54,7 +54,6 @@ impl Slice {
         if playback_rate > 1.0 {
             adjusted_len = (adjusted_len as f64 / playback_rate) as i64;
         }
-//        println!("pbr {}", playback_rate);
 
         // return but avoiding clicks
         next_frame
@@ -145,7 +144,11 @@ impl SliceSeq {
         };
 
         // current slice is consumable so we need to check if its not already the same one
+        // @TODO maybe a bit harsh, check if slice have been consumed before
         if self.current_slice.idx != curr_slice.idx {
+            if !self.current_slice.is_consumed() {
+                println!("unfinished");
+            }
             self.current_slice = *curr_slice;
         };
 
@@ -157,6 +160,8 @@ impl SliceSeq {
     fn shuffle(&mut self) {
         // shuffle the keys
         // @TODO first make it work ....
+
+        println!("LOL");
 
         // will be shuffled
         let mut kz: Vec<usize> = self.slices.keys().map(|k| *k).collect();
@@ -227,7 +232,7 @@ impl SlicerGen {
                 slices: BTreeMap::new(),
                 t_slices: BTreeMap::new(),
                 current_slice: Default::default(),
-                positions_mode: super::PositionsMode::Bar16Mode(),
+                positions_mode: super::PositionsMode::OnsetMode(),
             },
         }
     }
@@ -293,7 +298,7 @@ impl SampleGenerator for SlicerGen {
         }
 
         if self.sample_gen.is_beat_frame() {
-            self.slice_seq.shuffle();
+//            self.slice_seq.shuffle();
         }
     }
 
