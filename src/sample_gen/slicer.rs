@@ -1,16 +1,20 @@
 extern crate sample;
 extern crate time_calc;
+extern crate rand;
 
 use self::sample::frame::Stereo;
 use self::sample::Frame;
 use self::time_calc::Ticks;
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use std::collections::BTreeMap;
+use self::rand::Rng;
 
 /// A Slice struct
 /// should be copied
 #[derive(Debug, Default, Copy, Clone)]
 struct Slice {
+    /// slice idx
+    idx: usize,
     /// start sample index in the buffer
     start: usize,
     /// end sample index in the buffer
@@ -82,8 +86,10 @@ impl Slice {
 struct SliceSeq {
     /// Positions mode define which kind of positions to use in the slicer
     positions_mode: super::PositionsMode,
-    /// Slice ordered according to the keys
+    /// Slices ordered according to the keys, in orginal order
     slices: BTreeMap<usize, Slice>,
+    /// transformed slices
+    t_slices: BTreeMap<usize, Slice>,
     /// curently playing slice that will be consumed
     current_slice: Slice,
 }
@@ -101,6 +107,7 @@ impl SliceSeq {
             self.slices.insert(
                 pos[0],
                 Slice {
+                    idx,
                     start: pos[0],
                     end: pos[1] - 1, // can't fail
                     cursor: 0,
@@ -108,10 +115,14 @@ impl SliceSeq {
             );
         }
 
+        &self.slices[..];
+        // ...
+        self.t_slices = self.slices.clone();
+
         // init the first slice
         self.current_slice = *self.slices.get(&0).unwrap();
 
-        println!("{:?}", self.current_slice);
+//        println!("{:?}", self.current_slice);
     }
 
     /// get next frame according to the given frame index at seq level
@@ -130,12 +141,12 @@ impl SliceSeq {
 
         // check the curr_slice_idx, if none, it is the last
         let curr_slice = match curr_slice_idx {
-            None => self.slices.values().last().unwrap(),
-            Some(idx) => self.slices.get(idx).unwrap(),
+            None => self.t_slices.values().last().unwrap(),
+            Some(idx) => self.t_slices.get(idx).unwrap(),
         };
 
         // current slice is consumable so we need to check if its not already the same one
-        if self.current_slice.start != curr_slice.start {
+        if self.current_slice.idx != curr_slice.idx {
             self.current_slice = *curr_slice;
         };
 
@@ -145,7 +156,20 @@ impl SliceSeq {
 
     /// Shuffles the slices !
     fn shuffle(&mut self) {
-        self.slices.iter().choose();
+        // shuffle the keys
+        // @TODO first make it work ....
+        let mut kz: Vec<usize> = self.slices.keys().map(|k| *k).collect();
+        let orig = kz.clone();
+        rand::thread_rng().shuffle(&mut kz );
+
+        // swap pairwise
+        for (idx, slice_index) in kz.iter().enumerate() {
+            let mut new = *self.slices.get(&slice_index).unwrap();
+            let old = self.slices.get(&orig[idx]).unwrap();
+            self.t_slices.insert(orig[idx], new);
+        }
+
+        // @TODO re-process t_slices lengths
     }
 }
 
@@ -176,7 +200,8 @@ impl SlicerGen {
                 sync_next_frame_index: 0,
             },
             slice_seq: SliceSeq {
-                slices: BTreeMap::new(), // is it useful to pre-allocate?
+                slices: BTreeMap::new(),
+                t_slices: BTreeMap::new(),
                 current_slice: Default::default(),
                 positions_mode: super::PositionsMode::QonsetMode(),
             },
@@ -220,6 +245,7 @@ impl SampleGenerator for SlicerGen {
         // simply clone in the buffer
         self.sample_gen.smartbuf = smartbuf.clone();
         self.slice_seq.init_from_buffer(smartbuf);
+        self.slice_seq.shuffle();
     }
 
     /// Sync the slicer according to a clock
@@ -240,6 +266,10 @@ impl SampleGenerator for SlicerGen {
         if self.sample_gen.playback_rate != new_rate {
             // simple update
             self.sample_gen.playback_rate = new_rate;
+        }
+
+        if self.sample_gen.is_beat_frame() {
+            self.slice_seq.shuffle();
         }
     }
 
