@@ -142,6 +142,11 @@ impl SliceSeq {
         // return next frame
         next_frame
     }
+
+    /// Shuffles the slices !
+    fn shuffle(&mut self) {
+        self.slices.iter().choose();
+    }
 }
 
 /// Slicer sample generator.
