@@ -58,7 +58,7 @@ impl Slice {
 
         // return but avoiding clicks
         next_frame
-          .scale_amp(super::gen_utils::fade_in(self.cursor as i64, 64))
+          .scale_amp(super::gen_utils::fade_in(self.cursor as i64, 128))
           .scale_amp(super::gen_utils::fade_out(
               self.cursor as i64,
               1024 * 4, // @TODO this should be param
@@ -115,7 +115,6 @@ impl SliceSeq {
             );
         }
 
-        &self.slices[..];
         // ...
         self.t_slices = self.slices.clone();
 
@@ -158,8 +157,14 @@ impl SliceSeq {
     fn shuffle(&mut self) {
         // shuffle the keys
         // @TODO first make it work ....
+
+        // will be shuffled
         let mut kz: Vec<usize> = self.slices.keys().map(|k| *k).collect();
+
+        // keep the original keys
         let orig = kz.clone();
+
+        // shuffle
         rand::thread_rng().shuffle(&mut kz );
 
         // swap pairwise
@@ -169,7 +174,26 @@ impl SliceSeq {
             self.t_slices.insert(orig[idx], new);
         }
 
-        // @TODO re-process t_slices lengths
+        // slice length correction
+        for (idx, slice_index) in self.slices.keys().enumerate() {
+            let old = self.slices.get(slice_index).unwrap();
+            let mut this = *self.t_slices.get(slice_index).unwrap();
+            this.end = this.start + old.len();
+            self.t_slices.insert(*slice_index, this);
+        }
+
+        let mut new_total = 0;
+        let mut old_total = 0;
+        // check
+        // @TODO MISSING ELLIOT
+        for (key, slice) in self.t_slices.iter() {
+            new_total += slice.len();
+        }
+        for (key, slice) in self.slices.iter() {
+            old_total += slice.len();
+        }
+
+        println!("new total: {}, old_total: {}", new_total, old_total);
     }
 }
 
@@ -203,7 +227,7 @@ impl SlicerGen {
                 slices: BTreeMap::new(),
                 t_slices: BTreeMap::new(),
                 current_slice: Default::default(),
-                positions_mode: super::PositionsMode::QonsetMode(),
+                positions_mode: super::PositionsMode::Bar16Mode(),
             },
         }
     }
