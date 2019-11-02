@@ -23,6 +23,10 @@ impl Slice {
     /// get the next frame at cursor
     /// if the cursor is consumed, return the zero frame
     fn next_frame(&mut self, frames: &[Stereo<f32>]) -> Stereo<f32> {
+        // init with default
+        let mut next_frame = Stereo::<f32>::equilibrium();
+
+        // grab the frame
         if !self.is_consumed() {
             // get the frame index cursor
             let frame_index = self.cursor + self.start;
@@ -34,13 +38,22 @@ impl Slice {
             let new_frame = frames.get(frame_index);
             match new_frame {
                 None => {
-                    println!("out of slice bound");
-                    return Stereo::<f32>::equilibrium();
+                    // out of bounds, should never happend
+                    next_frame = Stereo::<f32>::equilibrium();
                 }
-                Some(f) => return *f,
+                Some(f) => next_frame = *f,
             }
         }
-        Stereo::<f32>::equilibrium()
+
+        // return but avoiding clicks
+        next_frame
+          .scale_amp(super::gen_utils::fade_in(self.cursor as i64, 64))
+          .scale_amp(super::gen_utils::fade_out(
+              self.cursor as i64,
+              1024 * 2,
+              self.len() as i64,
+          ))
+          .scale_amp(1.45)
     }
 
     /// the cursor is consumed
@@ -116,7 +129,6 @@ impl SliceSeq {
         // current slice is consumable so we need to check if its not already the same one
         // @TODO doesnt allows for repeats
         if self.current_slice.start != curr_slice.start {
-//            println!("{}", frame_index);
             self.current_slice = *curr_slice;
         };
 
@@ -164,88 +176,10 @@ impl SlicerGen {
         // compute the frame index as given by the clock
         let frame_index = self.sample_gen.frame_index;
 
-        self.slice_seq.next_frame(frame_index, &self.sample_gen.smartbuf.frames)
+        // just use the slice sequencer
+        self.slice_seq
+            .next_frame(frame_index, &self.sample_gen.smartbuf.frames)
     }
-
-    //    /// Main Logic of Slicer computing the nextframe
-    //    fn slicer_next_frame_old(&mut self) -> Stereo<f32> {
-    //        // slice pis bounds
-    //        let bounds = self.get_position_bounds();
-    //
-    //        // get original positions
-    //        let positions = &self.sample_gen.smartbuf.positions[&self.positions_mode][..];
-    //        // apply bounds
-    //        let positions = &positions[bounds.0..bounds.1];
-    //
-    //        // all frames
-    //        let frames = &self.sample_gen.smartbuf.frames;
-    //
-    //        // total number of frames in the buffer
-    //        // let num_frames = frames.len() as i64;
-    //        let num_frames = self.sample_gen.loop_get_max_frame() as i64;
-    //
-    //        // number of slices
-    //        let num_slices = positions[bounds.0..bounds.1].len() as i64;
-    //        // how many frames elapsed from the clock point of view
-    //        // because the frame_index is ALWAYS in sync with the ticks
-    //        let clock_frames = self.sample_gen.frame_index as i64;
-    //        // current cycle, i.e n rotations of full smart buffer
-    //        let cycle = (clock_frames as f32 / num_frames as f32) as i64;
-    //
-    //        // compute next slice
-    //        let next_slice = match positions
-    //            .iter()
-    //            .position(|&x| x as i64 + (cycle * num_frames) > clock_frames)
-    //        {
-    //            Some(idx) => idx,
-    //            None => 0,
-    //        };
-    //
-    //        // compute curr slice
-    //        let curr_slice = (next_slice as i64 - 1) % num_slices;
-    //
-    //        // we just suddently jumped to the next slice :)
-    //        if self.pslice != curr_slice as usize {
-    //            // set loop div to the next slice
-    //            // it works with clicks
-    //            if self.sample_gen.loop_div != self.sample_gen.next_loop_div {
-    //                self.sample_gen.loop_div = self.sample_gen.next_loop_div;
-    //            }
-    //            // reset cursor
-    //            self.cursor = 0;
-    //            // update the previous slice
-    //            self.pslice = curr_slice as usize;
-    //        }
-    //
-    //        // compute this current slice len in samples
-    //        let slice_len = positions[next_slice as usize] - positions[curr_slice as usize];
-    //
-    //        // init nextframe with silence
-    //        let mut next_frame = Stereo::<f32>::equilibrium();
-    //
-    //        // checj if we have still samples to read in this slice ?
-    //        if (slice_len as i64 - self.cursor) > 0 {
-    //            // get the right index in buffer
-    //            let mut findex = self.cursor as u64 + positions[curr_slice as usize];
-    //
-    //            // dont overflow the buffer with wrapping
-    //            findex = findex % num_frames as u64;
-    //
-    //            // get next frame, apply fade in/out slopes
-    //            next_frame = frames[findex as usize]
-    //                .scale_amp(super::gen_utils::fade_in(self.cursor, 64))
-    //                .scale_amp(super::gen_utils::fade_out(
-    //                    self.cursor,
-    //                    1024 * 2,
-    //                    slice_len as i64,
-    //                ))
-    //                .scale_amp(1.45); // factor that balance with other sample gen types
-    //
-    //            self.cursor += 1;
-    //        }
-    //
-    //        return next_frame;
-    //    }
 }
 
 /// SampleGenerator implementation for SlicerGen
