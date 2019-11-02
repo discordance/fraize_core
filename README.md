@@ -16,3 +16,7 @@ This phrase sampler is an attempt to create a basic headless audio loops player,
 - Implement a control API accessible via Network along with a spec to later control the sampler with a proper GUI.
 - Get rid of any C dependency.
 - Being Platform-independent.
+
+## Links
+
+- https://github.com/korken89/biquad-rs
