@@ -9,12 +9,17 @@ use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use std::collections::BTreeMap;
 use self::rand::Rng;
 
+/// Used to definde slicer fadeout fade out in samples
+const SLICE_FADE_IN : usize = 64;
+const SLICE_FADE_OUT : usize = 1024 * 2;
+
+
 /// A Slice struct
 /// should be copied
 #[derive(Debug, Default, Copy, Clone)]
 struct Slice {
-    /// slice idx
-    idx: usize,
+    /// slice id
+    id: usize,
     /// start sample index in the buffer
     start: usize,
     /// end sample index in the buffer
@@ -49,19 +54,13 @@ impl Slice {
             }
         }
 
-        // adjust the fade out according to playback_rate
-        let mut adjusted_len = self.len() as i64;
-        if playback_rate > 1.0 {
-            adjusted_len = (adjusted_len as f64 / playback_rate) as i64;
-        }
-
         // return but avoiding clicks
         next_frame
-          .scale_amp(super::gen_utils::fade_in(self.cursor as i64, 64))
+          .scale_amp(super::gen_utils::fade_in(self.cursor as i64, SLICE_FADE_IN as i64))
           .scale_amp(super::gen_utils::fade_out(
               self.cursor as i64,
-              1024 * 2, // @TODO this should be param
-              adjusted_len,
+              SLICE_FADE_OUT as i64, // @TODO this should be param
+              self.len() as i64,
           ))
           .scale_amp(1.45)
     }
@@ -69,6 +68,11 @@ impl Slice {
     /// the cursor is consumed
     fn is_consumed(&self) -> bool {
         self.cursor == self.len()
+    }
+
+    /// how many left
+    fn remaining(&self) -> usize {
+        return self.len() - self.cursor;
     }
 
     /// get slice len
@@ -81,6 +85,7 @@ impl Slice {
 /// Usefull to order and re-order the slices in any order
 /// BTreeMap Keys are the sample index of the start slices at original playback speed
 /// By default the keys are given by the buffer onset positions, depending the mode
+/// @TODO missing a fade in out when appling transforms
 #[derive(Debug, Clone)]
 struct SliceSeq {
     /// Positions mode define which kind of positions to use in the slicer
@@ -106,7 +111,7 @@ impl SliceSeq {
             self.slices.insert(
                 pos[0],
                 Slice {
-                    idx,
+                    id: idx,
                     start: pos[0],
                     end: pos[1], // can't fail
                     cursor: 0,
@@ -119,8 +124,6 @@ impl SliceSeq {
 
         // init the first slice
         self.current_slice = *self.slices.get(&0).unwrap();
-
-//        println!("{:?}", self.current_slice);
     }
 
     /// get next frame according to the given frame index at seq level
@@ -131,25 +134,61 @@ impl SliceSeq {
 
         // perform the next slice computation
         // give a nice ordered list of start slices
-        let mut kz = self.slices.keys();
+        let mut kz = self.t_slices.keys();
 
         // elegant and ugly at the same time
         // find the first slice index in sample that is just above the frame_index
         let curr_slice_idx = kz.rev().find(|s| **s <= frame_index as usize);
 
         // check the curr_slice_idx, if none, it is the last
-        let curr_slice = match curr_slice_idx {
-            None => self.t_slices.values().last().unwrap(),
-            Some(idx) => self.t_slices.get(idx).unwrap(),
+        let (curr_slice_idx, curr_slice) = match curr_slice_idx {
+            None => (*self.t_slices.keys().last().unwrap(), self.t_slices.values().last().unwrap()),
+            Some(idx) => (*idx, self.t_slices.get(idx).unwrap()),
         };
 
-        // current slice is consumable so we need to check if its not already the same one
-        // @TODO maybe a bit harsh, check if slice have been consumed before
-        if self.current_slice.idx != curr_slice.idx {
-            if !self.current_slice.is_consumed() {
-                println!("unfinished");
-            }
+        // shadow kv
+        let mut kz = self.slices.keys();
+
+        // get the next slice idx
+        let next_slice_idx = kz.find(|s| **s > curr_slice_idx);
+
+        // need to look ahead of time to fix glitches in shuffling non equal len slices
+        let next_slice_idx = match next_slice_idx {
+            None => 0,
+            Some(nidx) => *nidx,
+        };
+
+        // current slice is not the one that should be, time to switch !
+        if self.current_slice.id != curr_slice.id {
+            // to avoid glitches / pops we need to wait at least a fade out duration before switching
+//            if self.current_slice.remaining() >= SLICE_FADE_OUT/2 {
+//                return next_frame;
+//            }
+
+//            println!("{}", self.current_slice.remaining());
+            // sets
             self.current_slice = *curr_slice;
+
+            // needs end of slice error fix
+            let mut adjusted_len = self.current_slice.len();
+
+            // fix for shuffle and mismatching length
+            if curr_slice_idx < next_slice_idx {
+                let real_len = (next_slice_idx-curr_slice_idx);
+                if adjusted_len > real_len {
+                    adjusted_len =  real_len
+                }
+            } else {
+                adjusted_len = frames.len() - curr_slice_idx;
+            }
+
+            // fix for faster playback rate
+            if playback_rate > 1.0 {
+                adjusted_len = (adjusted_len as f64 / playback_rate) as usize;
+            }
+
+            // apply new length
+            self.current_slice.end = self.current_slice.start + adjusted_len;
         };
 
         // return next frame
@@ -160,8 +199,6 @@ impl SliceSeq {
     fn shuffle(&mut self) {
         // shuffle the keys
         // @TODO first make it work ....
-
-        println!("LOL");
 
         // will be shuffled
         let mut kz: Vec<usize> = self.slices.keys().map(|k| *k).collect();
@@ -178,27 +215,6 @@ impl SliceSeq {
             let old = self.slices.get(&orig[idx]).unwrap();
             self.t_slices.insert(orig[idx], new);
         }
-
-        // slice length correction
-        for (idx, slice_index) in self.slices.keys().enumerate() {
-            let old = self.slices.get(slice_index).unwrap();
-            let mut this = *self.t_slices.get(slice_index).unwrap();
-            this.end = this.start + old.len();
-            self.t_slices.insert(*slice_index, this);
-        }
-
-        let mut new_total = 0;
-        let mut old_total = 0;
-        // check
-        // @TODO MISSING ELLIOT
-        for (key, slice) in self.t_slices.iter() {
-            new_total += slice.len();
-        }
-        for (key, slice) in self.slices.iter() {
-            old_total += slice.len();
-        }
-
-        println!("new total: {}, old_total: {}", new_total, old_total);
     }
 }
 
@@ -274,7 +290,7 @@ impl SampleGenerator for SlicerGen {
         // simply clone in the buffer
         self.sample_gen.smartbuf = smartbuf.clone();
         self.slice_seq.init_from_buffer(smartbuf);
-        self.slice_seq.shuffle();
+//        self.slice_seq.shuffle();
     }
 
     /// Sync the slicer according to a clock
@@ -298,7 +314,7 @@ impl SampleGenerator for SlicerGen {
         }
 
         if self.sample_gen.is_beat_frame() {
-//            self.slice_seq.shuffle();
+            self.slice_seq.shuffle();
         }
     }
 
