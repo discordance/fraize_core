@@ -22,7 +22,7 @@ struct Slice {
 impl Slice {
     /// get the next frame at cursor
     /// if the cursor is consumed, return the zero frame
-    fn next_frame(&mut self, frames: &[Stereo<f32>]) -> Stereo<f32> {
+    fn next_frame(&mut self, playback_rate: f64, frames: &[Stereo<f32>]) -> Stereo<f32> {
         // init with default
         let mut next_frame = Stereo::<f32>::equilibrium();
 
@@ -45,13 +45,20 @@ impl Slice {
             }
         }
 
+        // adjust the fade out according to playback_rate
+        let mut adjusted_len = self.len() as i64;
+        if playback_rate > 1.0 {
+            adjusted_len = (adjusted_len as f64 / playback_rate) as i64;
+        }
+//        println!("pbr {}", playback_rate);
+
         // return but avoiding clicks
         next_frame
           .scale_amp(super::gen_utils::fade_in(self.cursor as i64, 64))
           .scale_amp(super::gen_utils::fade_out(
               self.cursor as i64,
-              1024 * 2,
-              self.len() as i64,
+              1024 * 4, // @TODO this should be param
+              adjusted_len,
           ))
           .scale_amp(1.45)
     }
@@ -69,8 +76,8 @@ impl Slice {
 
 /// A Slice Sequencer
 /// Usefull to order and re-order the slices in any order
-/// Hashmap Keys are the sample index of the start slices at original playback speed
-/// By default the order given by the sample position
+/// BTreeMap Keys are the sample index of the start slices at original playback speed
+/// By default the keys are given by the buffer onset positions, depending the mode
 #[derive(Debug, Clone)]
 struct SliceSeq {
     /// Positions mode define which kind of positions to use in the slicer
@@ -108,9 +115,10 @@ impl SliceSeq {
     }
 
     /// get next frame according to the given frame index at seq level
-    fn next_frame(&mut self, frame_index: u64, frames: &[Stereo<f32>]) -> Stereo<f32> {
+    /// it uses playback_speed to adjust the slice envelope
+    fn next_frame(&mut self, playback_rate: f64, frame_index: u64, frames: &[Stereo<f32>]) -> Stereo<f32> {
         // grab the next frame
-        let next_frame = self.current_slice.next_frame(frames);
+        let next_frame = self.current_slice.next_frame(playback_rate, frames);
 
         // perform the next slice computation
         // give a nice ordered list of start slices
@@ -127,7 +135,6 @@ impl SliceSeq {
         };
 
         // current slice is consumable so we need to check if its not already the same one
-        // @TODO doesnt allows for repeats
         if self.current_slice.start != curr_slice.start {
             self.current_slice = *curr_slice;
         };
@@ -166,7 +173,7 @@ impl SlicerGen {
             slice_seq: SliceSeq {
                 slices: BTreeMap::new(), // is it useful to pre-allocate?
                 current_slice: Default::default(),
-                positions_mode: super::PositionsMode::Bar16Mode(),
+                positions_mode: super::PositionsMode::QonsetMode(),
             },
         }
     }
@@ -178,14 +185,14 @@ impl SlicerGen {
 
         // just use the slice sequencer
         self.slice_seq
-            .next_frame(frame_index, &self.sample_gen.smartbuf.frames)
+            .next_frame(self.sample_gen.playback_rate, frame_index, &self.sample_gen.smartbuf.frames)
     }
 }
 
 /// SampleGenerator implementation for SlicerGen
 impl SampleGenerator for SlicerGen {
     /// Yields processed block out of the samplegen.
-    /// This lazy method trigger all the processing.
+    /// This method trigger all the processing.
     fn next_block(&mut self, block_out: &mut [Stereo<f32>]) {
         // println!("block call {}", self.sample_gen.playing);
         // just write zero stero frames
@@ -224,6 +231,7 @@ impl SampleGenerator for SlicerGen {
         let new_rate = global_tempo as f64 / original_tempo;
 
         // has the tempo changed ? update accordingly
+        // @TODO equality check of float ...
         if self.sample_gen.playback_rate != new_rate {
             // simple update
             self.sample_gen.playback_rate = new_rate;
