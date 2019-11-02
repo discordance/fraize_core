@@ -58,10 +58,10 @@ impl Slice {
 
         // return but avoiding clicks
         next_frame
-          .scale_amp(super::gen_utils::fade_in(self.cursor as i64, 128))
+          .scale_amp(super::gen_utils::fade_in(self.cursor as i64, 64))
           .scale_amp(super::gen_utils::fade_out(
               self.cursor as i64,
-              1024 * 4, // @TODO this should be param
+              1024 * 2, // @TODO this should be param
               adjusted_len,
           ))
           .scale_amp(1.45)
@@ -69,7 +69,7 @@ impl Slice {
 
     /// the cursor is consumed
     fn is_consumed(&self) -> bool {
-        self.cursor > self.len()
+        self.cursor == self.len()
     }
 
     /// get slice len
@@ -109,7 +109,7 @@ impl SliceSeq {
                 Slice {
                     idx,
                     start: pos[0],
-                    end: pos[1] - 1, // can't fail
+                    end: pos[1], // can't fail
                     cursor: 0,
                 },
             );
