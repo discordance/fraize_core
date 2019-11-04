@@ -205,6 +205,7 @@ impl SliceSeq {
                         }
                     }
                     // go back to 1
+                    // maybe no good
                     self.current_slice = *self.t_slices.get(&0).unwrap();
                     self.transform.next_transform = None;
                 }
