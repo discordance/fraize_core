@@ -9,13 +9,13 @@ This phrase sampler is an attempt to create a basic headless audio loops player,
 
 ## ROADMAP
 
+- Having a sane audio engine beyond my knowledge.
 - Properly use the sample crate, its gold.
 - Implement features beyond simple sample player engines, as effects and mixers.
-- Implement a proper headless sample lib manager.
-- Implement MIDI controllable parameters.
 - Implement a control API accessible via Network along with a spec to later control the sampler with a proper GUI.
 - Get rid of any C dependency.
 - Being Platform-independent.
+- Get rich.
 
 ## Links
 
