@@ -5,6 +5,7 @@ use self::crossbeam_channel::bounded;
 use config::Config;
 use serde::Deserialize;
 use std::thread;
+use sample_gen::slicer::TransformType;
 
 /// ControlMessage Enum is the main message for the control bus
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -36,6 +37,12 @@ pub enum ControlMessage {
         val: u64,
         track_num: usize,
     },
+    /// Slicer messages
+    Slicer {
+        tcode: u64,
+        track_num: usize,
+        message: SlicerMessage
+    }
 }
 
 /// Implement control message helpers
@@ -57,9 +64,16 @@ impl ControlMessage {
     }
 
     /// map function as in Processing
+    /// @TODO not sure belongs there
     fn map(val: f32, ostart : f32, ostop : f32, nstart : f32, nstop : f32) -> f32 {
         nstart + (nstop - nstart) * ((val - ostart) / (ostop - ostart))
     }
+}
+
+/// Slicer specific messages
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum SlicerMessage {
+    Transform(TransformType)
 }
 
 /// PlaybackMessage have all data used for sync

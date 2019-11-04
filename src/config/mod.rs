@@ -51,7 +51,7 @@ pub fn load_default() -> Config {
 }
 
 /// Loads and parse config
-fn load_conf(path: &str) -> Result<Config, Box<Error>> {
+fn load_conf(path: &str) -> Result<Config, Box<dyn Error>> {
     // load toml file
     let mut input = String::new();
 

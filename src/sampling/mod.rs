@@ -111,7 +111,7 @@ impl SampleLib {
 }
 
 /// init the SampleLib, loads the samples
-pub fn init_lib(conf: Config) -> Result<SampleLib, Box<Error>> {
+pub fn init_lib(conf: Config) -> Result<SampleLib, Box<dyn Error>> {
     // init lib
     let mut lib = SampleLib {
         buffers: Vec::new(),

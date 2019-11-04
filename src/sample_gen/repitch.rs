@@ -6,6 +6,7 @@ use self::sample::{Frame, Sample};
 use self::time_calc::{Beats, Ticks};
 
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
+use control::ControlMessage;
 
 /// LinInterp is a struct that helps interpolation operations.
 struct LinInterp {
@@ -150,6 +151,11 @@ impl SampleGenerator for RePitchGen {
     fn set_loop_div(&mut self, loop_div: u64) {
         // record next loop_div
         self.sample_gen.next_loop_div = loop_div;
+    }
+
+    /// SampleGen impl specific control message
+    fn push_control_message(&mut self, message: ControlMessage) {
+        // do nothing for now
     }
 }
 

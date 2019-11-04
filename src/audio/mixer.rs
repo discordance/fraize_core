@@ -3,6 +3,8 @@
 extern crate sample;
 extern crate crossbeam_channel;
 
+use std::any::Any;
+
 use self::sample::frame::{Frame, Stereo};
 
 use config::{Config, TrackType};
@@ -31,7 +33,7 @@ impl StereoExt<f32> for Stereo<f32> {
 /// AudioTrack is a AudioMixer track that embeds one sample generator and a chain of effects.
 struct AudioTrack {
     /// The attached sample generator.
-    generator: Box<SampleGenerator + 'static + Send>,
+    generator: Box<dyn SampleGenerator + 'static + Send>,
     /// Track's own audio buffer to write to. Avoid further memory allocations in the hot path.
     /// As we are using cpal, we dont know yet how to size it at init.
     /// A first audio round is necessary to get the size
@@ -51,7 +53,7 @@ struct AudioTrack {
 /// AudioTrack implementation.
 impl AudioTrack {
     /// new init the track from a sample generator
-    fn new(generator: Box<SampleGenerator + 'static + Send>, bank: usize) -> Self {
+    fn new(generator: Box<dyn SampleGenerator + 'static + Send>, bank: usize) -> Self {
         AudioTrack {
             generator,
             // we still dont know how much the buffer wants.
@@ -347,6 +349,17 @@ impl AudioMixer {
                                 // inc ticks received by the mixer
                                 self.clock_ticks += 1;
                             }
+                        }
+                    }
+                    // got a slicer message, we just find the right track and pass down to the generator implementation
+                    ControlMessage::Slicer { tcode: _, track_num, message: _ } => {
+                        // check if tracknum is around
+                        let tr = self.tracks.get_mut(track_num);
+                        match tr {
+                            Some(t) => {
+                                t.generator.push_control_message(command);
+                            }
+                            _ => (),
                         }
                     }
                 },

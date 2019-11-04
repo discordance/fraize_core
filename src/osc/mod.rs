@@ -8,10 +8,11 @@ use self::rosc::encoder;
 use self::rosc::{OscMessage, OscPacket, OscType};
 use self::serde_json::to_string;
 use config::Config;
-use control::ControlMessage;
+use control::{ControlMessage, SlicerMessage};
 use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
 use std::str::FromStr;
 use std::thread;
+use sample_gen::slicer::TransformType;
 
 /// OSCRemoteControl keeps track of the remote controller app that control this smplr instance
 struct OSCRemoteControl {
@@ -163,6 +164,32 @@ fn handle_incoming_packet(
                             };
                             // send
                             command_tx.try_send(m).unwrap();
+                        }
+                        _ => {}
+                    }
+                }
+                "/smplr/track/slicer/transform" => {
+                    let args = msg.args.unwrap();
+                    // nice way to handle args :D
+                    match (&args[0], &args[1]) {
+                        (OscType::Int(idx), OscType::String(t)) => {
+                            match &t[..] {
+                                "reset" => {
+                                    let _res = command_tx.try_send(ControlMessage::Slicer {
+                                        tcode: 0,
+                                        track_num: *idx as usize,
+                                        message: SlicerMessage::Transform(TransformType::Reset())
+                                    });
+                                }
+                                "shuffle" => {
+                                    let _res = command_tx.try_send(ControlMessage::Slicer {
+                                        tcode: 0,
+                                        track_num: *idx as usize,
+                                        message: SlicerMessage::Transform(TransformType::Shuffle())
+                                    });
+                                }
+                                _ => {}, // unknown
+                            };
                         }
                         _ => {}
                     }

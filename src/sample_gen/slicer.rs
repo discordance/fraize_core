@@ -2,16 +2,17 @@ extern crate rand;
 extern crate sample;
 extern crate time_calc;
 
+use std::collections::BTreeMap;
 use self::rand::Rng;
 use self::sample::frame::Stereo;
 use self::sample::Frame;
 use self::time_calc::Ticks;
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
-use std::collections::BTreeMap;
+use control::{ControlMessage, SlicerMessage};
 
 /// Used to define slicer fadeins fadeouts in samples
 const SLICE_FADE_IN: usize = 32;
-const SLICE_FADE_OUT: usize = 1024 * 2;
+const SLICE_FADE_OUT: usize = 1024;
 const SAFE_FADE_OUT_IN: usize = 64;
 
 /// A Slice struct
@@ -85,8 +86,11 @@ impl Slice {
 }
 
 /// Slice Sequence transformation types
-#[derive(Debug, Clone)]
-enum TransformType {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransformType {
+    /// Reset slices to original order
+    Reset(),
+    /// Shuffle all the slices randomly
     Shuffle(),
 }
 
@@ -102,6 +106,7 @@ struct Transform {
 /// BTreeMap Keys are the sample index of the start slices at original playback speed
 /// By default the keys are given by the buffer onset positions, depending the mode
 /// @TODO missing a fade in out when appling transforms
+/// @TODO ugly allocations
 #[derive(Debug, Clone)]
 struct SliceSeq {
     /// Positions mode define which kind of positions to use in the slicer
@@ -139,6 +144,7 @@ impl SliceSeq {
         }
 
         // ...
+        // @TODO not allocate
         self.t_slices = self.slices_orig.clone();
 
         // init the first slice
@@ -153,8 +159,6 @@ impl SliceSeq {
         frame_index: u64,
         frames: &[Stereo<f32>],
     ) -> Stereo<f32> {
-        // apply any pending transform
-
         // grab the next frame
         let mut next_frame = self.current_slice.next_frame(playback_rate, frames);
 
@@ -199,9 +203,12 @@ impl SliceSeq {
                 Some(transform) => {
                     // check the pending transform
                     match transform {
+                        TransformType::Reset() => {
+                            self.do_reset();
+                        }
                         TransformType::Shuffle() => {
                             // apply shuffle
-                            self.shuffle();
+                            self.do_shuffle();
                         }
                     }
                     // go back to 1
@@ -237,6 +244,13 @@ impl SliceSeq {
         next_frame
     }
 
+    /// safe reset
+    /// will wait new slice to kick in
+    fn safe_reset(&mut self) {
+        // set next transform
+        self.transform.next_transform = Some(TransformType::Reset());
+    }
+
     /// safe shuffle
     /// will wait new slice to kick in
     fn safe_shuffle(&mut self) {
@@ -244,24 +258,36 @@ impl SliceSeq {
         self.transform.next_transform = Some(TransformType::Shuffle());
     }
 
-    /// Shuffles the slices ! CLICK INDUCING
+    /// reset the slices !
+    fn do_reset(&mut self) {
+        // @TODO not allocate
+        self.t_slices = self.slices_orig.clone();
+    }
+
+    /// Shuffles the slices ! Can introduce clicks if done in the middle
     /// safe_shuffle should be used instead
-    /// @TODO suspect mem allocation
-    fn shuffle(&mut self) {
+    /// @TODO 2 mem allocation
+    fn do_shuffle(&mut self) {
         // shuffle the keys
         // will be shuffled
+        // @TODO not allocate
         let mut kz: Vec<usize> = self.slices_orig.keys().map(|k| *k).collect();
 
         // keep the original keys
+        // @TODO not allocate
         let orig = kz.clone();
 
         // shuffle
         rand::thread_rng().shuffle(&mut kz);
 
+        // clear
+        self.t_slices.clear();
+
         // swap pairwise
         for (idx, slice_index) in kz.iter().enumerate() {
             let mut new = *self.slices_orig.get(&slice_index).unwrap();
             let old = self.slices_orig.get(&orig[idx]).unwrap();
+            // @TODO not allocate
             self.t_slices.insert(orig[idx], new);
         }
     }
@@ -365,9 +391,9 @@ impl SampleGenerator for SlicerGen {
             self.sample_gen.playback_rate = new_rate;
         }
 
-        if self.sample_gen.is_beat_frame() {
-            self.slice_seq.safe_shuffle();
-        }
+//        if self.sample_gen.is_beat_frame() {
+//            self.slice_seq.safe_shuffle();
+//        }
     }
 
     /// sets play
@@ -397,6 +423,28 @@ impl SampleGenerator for SlicerGen {
     fn set_loop_div(&mut self, loop_div: u64) {
         // record next loop_div
         self.sample_gen.next_loop_div = loop_div;
+    }
+
+    /// SampleGen impl specific control message
+    fn push_control_message(&mut self, message: ControlMessage) {
+        // only interested in Slicer messages
+        match message {
+            ControlMessage::Slicer { tcode: _, track_num: _, message } => {
+                match message {
+                    SlicerMessage::Transform(t) => {
+                        match t {
+                            TransformType::Reset() => {
+                                self.slice_seq.safe_reset();
+                            },
+                            TransformType::Shuffle() => {
+                                self.slice_seq.safe_shuffle();
+                            },
+                        }
+                    },
+                }
+            },
+            _ => () // ignore the rest
+        }
     }
 }
 

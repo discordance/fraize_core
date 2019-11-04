@@ -10,6 +10,7 @@ use self::sample::frame::Stereo;
 use self::sample::Frame;
 use self::time_calc::{Beats, Ppqn, Ticks};
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
+use control::ControlMessage;
 
 ///
 const PI: f64 = std::f64::consts::PI;
@@ -332,6 +333,11 @@ impl SampleGenerator for PVOCGen {
     /// Sets the loop div
     fn set_loop_div(&mut self, loop_div: u64) {
         self.sample_gen.next_loop_div = loop_div;
+    }
+
+    /// SampleGen impl specific control message
+    fn push_control_message(&mut self, message: ControlMessage) {
+        // do nothing for now
     }
 }
 

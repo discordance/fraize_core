@@ -147,6 +147,13 @@ fn midi_cb(
                                 } => {
                                     unimplemented!();
                                 }
+                                ControlMessage::Slicer {
+                                    tcode: _,
+                                    track_num,
+                                    message,
+                                } => {
+                                    unimplemented!();
+                                }
                             }
                         }
                     }

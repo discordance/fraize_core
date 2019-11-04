@@ -26,6 +26,7 @@ use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
 use self::time_calc::{Beats, Ppqn};
 use std::collections::HashMap;
+use control::ControlMessage;
 
 /// pulse per quarter note
 pub const PPQN: Ppqn = 24;
@@ -290,4 +291,7 @@ pub trait SampleGenerator {
     fn reset(&mut self);
     /// Sets the loop div
     fn set_loop_div(&mut self, loop_div: u64);
+    /// Used to pass control message that triggers actions specific to SampleGenerator implementations
+    fn push_control_message(&mut self, message: ControlMessage);
+
 }

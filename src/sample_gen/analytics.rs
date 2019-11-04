@@ -142,7 +142,7 @@ pub fn slice_onsets(len: usize, divisor: usize) -> Vec<usize> {
     let step = len / divisor;
     let mut positions = Vec::new();
     for x in 0..divisor {
-        positions.push((x * step));
+        positions.push(x * step);
     }
     positions.push(len);
     return positions;
