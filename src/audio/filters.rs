@@ -173,12 +173,12 @@ impl BiquadFilter {
 
         // return
         BiquadFilter {
-            a0: a0,
-            a1: a1,
-            a2: a2,
-            b0: b0,
-            b1: b1,
-            b2: b2,
+            a0,
+            a1,
+            a2,
+            b0,
+            b1,
+            b2,
             c1: b0 / a0,
             c2: b1 / a0,
             c3: b2 / a0,
@@ -199,6 +199,7 @@ impl BiquadFilter {
         let mut new_frame = Stereo::<f32>::equilibrium();
 
         // iterates over channels
+        // @TODO SIMD anyone ?
         for o in 0..2 {
             self.x[o][n - 2] = self.x[o][n - 1];
             self.x[o][n - 1] = self.x[o][n];

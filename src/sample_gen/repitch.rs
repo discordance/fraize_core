@@ -3,7 +3,7 @@ extern crate time_calc;
 
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
-use self::time_calc::Ticks;
+use self::time_calc::{Beats, Ticks};
 
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 
@@ -53,6 +53,7 @@ impl RePitchGen {
                 frame_index: 0,
                 playback_mult: 0,
                 loop_div: 1,
+                next_loop_div: 1,
                 loop_offset: 0,
                 playing: false,
                 smartbuf: SmartBuffer::new_empty(),
@@ -101,12 +102,17 @@ impl SampleGenerator for RePitchGen {
         let original_tempo = self.sample_gen.smartbuf.original_tempo;
         let clock_frames = Ticks(tick as i64).samples(original_tempo, PPQN, 44_100.0) as u64;
 
+        // we want to resync for each beat
+        let beat_samples =
+            Beats(1).samples(self.sample_gen.smartbuf.original_tempo, 44_100.0) as u64;
+        let is_beat = clock_frames % beat_samples == 0;
+
         // calculates the new playback rate
         let new_rate = global_tempo as f64 / original_tempo;
 
         // println!("gtempo: {} tick: {} newrate: {}", global_tempo, tick, new_rate);
         // has the tempo changed ? update accordingly
-        if self.sample_gen.playback_rate != new_rate {
+        if self.sample_gen.playback_rate != new_rate || is_beat {
             // simple update
             self.sample_gen.playback_rate = new_rate;
             // sync to the clock estimated frame index
@@ -141,8 +147,9 @@ impl SampleGenerator for RePitchGen {
     }
 
     /// Sets the loop div
-    fn set_loop_div(&mut self, loop_div : u64) {
-        self.sample_gen.loop_div = loop_div;
+    fn set_loop_div(&mut self, loop_div: u64) {
+        // record next loop_div
+        self.sample_gen.next_loop_div = loop_div;
     }
 }
 
@@ -153,6 +160,13 @@ impl Iterator for RePitchGen {
 
     /// Next computes the next frame and returns a Stereo<f32>
     fn next(&mut self) -> Option<Self::Item> {
+        // loop div activation
+        if self.sample_gen.is_beat_frame() {
+            if self.sample_gen.next_loop_div != self.sample_gen.loop_div {
+                self.sample_gen.loop_div = self.sample_gen.next_loop_div;
+            }
+        }
+
         // advance frames and calc interp val
         while self.interpolation.interp_val >= 1.0 {
             // get next frame, uses sync function to avoid clicks
