@@ -31,6 +31,16 @@ pub enum ControlMessage {
         val: f32,
         track_num: usize,
     },
+    /// Select next sample
+    TrackNextSample {
+        tcode: u64,
+        track_num: usize,
+    },
+    /// Select previous sample
+    TrackPrevSample {
+        tcode: u64,
+        track_num: usize,
+    },
     /// Track Pan
     TrackLoopDiv {
         tcode: u64,

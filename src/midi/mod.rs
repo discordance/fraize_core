@@ -154,6 +154,12 @@ fn midi_cb(
                                 } => {
                                     unimplemented!();
                                 }
+                                ControlMessage::TrackNextSample { tcode: _, track_num: _ } => {
+                                    unimplemented!();
+                                }
+                                ControlMessage::TrackPrevSample { tcode: _, track_num: _ } => {
+                                    unimplemented!();
+                                }
                             }
                         }
                     }

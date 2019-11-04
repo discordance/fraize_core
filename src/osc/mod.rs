@@ -168,6 +168,38 @@ fn handle_incoming_packet(
                         _ => {}
                     }
                 }
+                "/smplr/track/next_sample" => {
+                    let args = msg.args.unwrap();
+                    // nice way to handle args :D
+                    match &args[0] {
+                        OscType::Int(idx) => {
+                            // build message
+                            let m = ControlMessage::TrackNextSample {
+                                tcode: 0,
+                                track_num: *idx as usize,
+                            };
+                            // send
+                            command_tx.try_send(m).unwrap();
+                        }
+                        _ => {}
+                    }
+                },
+                "/smplr/track/prev_sample" => {
+                    let args = msg.args.unwrap();
+                    // nice way to handle args :D
+                    match &args[0] {
+                        OscType::Int(idx) => {
+                            // build message
+                            let m = ControlMessage::TrackPrevSample {
+                                tcode: 0,
+                                track_num: *idx as usize,
+                            };
+                            // send
+                            command_tx.try_send(m).unwrap();
+                        }
+                        _ => {}
+                    }
+                },
                 "/smplr/track/slicer/transform" => {
                     let args = msg.args.unwrap();
                     // nice way to handle args :D

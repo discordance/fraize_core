@@ -323,7 +323,7 @@ impl SlicerGen {
                 slices_orig: BTreeMap::new(),
                 t_slices: BTreeMap::new(),
                 current_slice: Default::default(),
-                positions_mode: super::PositionsMode::Bar16Mode(),
+                positions_mode: super::PositionsMode::OnsetMode(),
                 transform: Default::default(),
             },
         }

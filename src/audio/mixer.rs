@@ -255,26 +255,46 @@ impl AudioMixer {
                     } => {
                         // check if tracknum is around
                         let tr = self.tracks.get_mut(track_num);
-                        match tr {
-                            Some(t) => {
-                                // set the new selecta
-                                t.sample_select.new_value(val);
+                        if let Some(t) = tr {
+                            // set the new selecta
+                            t.sample_select.new_value(val);
 
-                                // match the resulting dir enum
-                                match t.sample_select.get_param() {
-                                    ::control::Direction::Up(_) => {
-                                        t.load_next_buffer(&self.sample_lib);
-                                    }
-                                    ::control::Direction::Down(_) => {
-                                        t.load_prev_buffer(&self.sample_lib);
-                                    }
-                                    ::control::Direction::Stable(_) => {}
+                            // match the resulting dir enum
+                            match t.sample_select.get_param() {
+                                ::control::Direction::Up(_) => {
+                                    t.load_next_buffer(&self.sample_lib);
                                 }
+                                ::control::Direction::Down(_) => {
+                                    t.load_prev_buffer(&self.sample_lib);
+                                }
+                                ::control::Direction::Stable(_) => {}
                             }
-                            _ => (),
                         }
-                        //            println!("change sample on track {}", track_num);
-                    }
+                    },
+                    // Next Sample
+                    ::control::ControlMessage::TrackNextSample {
+                        tcode: _,
+                        track_num,
+                    } => {
+                        // check if tracknum is around
+                        let tr = self.tracks.get_mut(track_num);
+                        if let Some(t) = tr {
+                            // set the next sample
+                            t.load_next_buffer(&self.sample_lib);
+                        }
+                    },
+                    // Previous Sample
+                    ::control::ControlMessage::TrackPrevSample {
+                        tcode: _,
+                        track_num,
+                    } => {
+                        // check if tracknum is around
+                        let tr = self.tracks.get_mut(track_num);
+                        if let Some(t) = tr {
+                            // set the prev sample
+                            t.load_prev_buffer(&self.sample_lib);
+                        }
+                    },
                     // Volume
                     ::control::ControlMessage::TrackVolume {
                         tcode: _,
@@ -283,12 +303,9 @@ impl AudioMixer {
                     } => {
                         // check if tracknum is around
                         let tr = self.tracks.get_mut(track_num);
-                        match tr {
-                            Some(t) => {
-                                // set the volume
-                                t.volume.new_value(val);
-                            }
-                            _ => (),
+                        if let Some(t) = tr {
+                            // set the volume
+                            t.volume.new_value(val);
                         }
                     }
                     // Pan
@@ -299,12 +316,9 @@ impl AudioMixer {
                     } => {
                         // check if tracknum is around
                         let tr = self.tracks.get_mut(track_num);
-                        match tr {
-                            Some(t) => {
-                                // set the pan
-                                t.pan.new_value(val);
-                            }
-                            _ => (),
+                        if let Some(t) = tr {
+                            // set the pan
+                            t.pan.new_value(val);
                         }
                     }
                     // LoopDiv
@@ -315,12 +329,9 @@ impl AudioMixer {
                     } => {
                         // check if tracknum is around
                         let tr = self.tracks.get_mut(track_num);
-                        match tr {
-                            Some(t) => {
-                                // set the loop div
-                                t.set_loop_div(val);
-                            }
-                            _ => (),
+                        if let Some(t) = tr {
+                            // set the loop div
+                            t.set_loop_div(val);
                         }
                     }
                     // Playback management
@@ -355,11 +366,8 @@ impl AudioMixer {
                     ControlMessage::Slicer { tcode: _, track_num, message: _ } => {
                         // check if tracknum is around
                         let tr = self.tracks.get_mut(track_num);
-                        match tr {
-                            Some(t) => {
-                                t.generator.push_control_message(command);
-                            }
-                            _ => (),
+                        if let Some(t) = tr {
+                            t.generator.push_control_message(command);
                         }
                     }
                 },
