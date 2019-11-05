@@ -68,6 +68,7 @@ pub fn detect_onsets(samples: &[f32]) -> Vec<usize> {
     let mut onset = Onset::new(WIND_SIZE, HOP_SIZE, SR).expect("Onset::new");
 
     // params
+    // @TODO review this as it sometimes doesn't produce onsets
     onset.set_threshold(0.9);
     onset.set_silence(-40.0);
     onset.set_minioi(0.005);

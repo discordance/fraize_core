@@ -1,7 +1,7 @@
 extern crate sample;
-use std::f32;
 use self::sample::frame::Stereo;
 use self::sample::Frame;
+use std::f32;
 
 /// A clamped fade_in
 pub fn fade_in(t: i64, len: i64) -> f32 {
@@ -25,7 +25,6 @@ pub fn fade_out(t: i64, len: i64, end: i64) -> f32 {
     }
     return 1.0;
 }
-
 
 /// Helper to exec microfades
 #[derive(Debug, Default, Copy, Clone)]
@@ -65,18 +64,56 @@ impl MicroFade {
                   self.cursor as i64,
                   d as i64,
                   d as i64
-              ))
+              ));
         }
         if self.cursor == d {
             return Stereo::<f32>::equilibrium();
         }
         if self.cursor > d {
             return frame.scale_amp(super::gen_utils::fade_in(
-                (self.cursor-d) as i64,
+                (self.cursor - d) as i64,
                 d as i64,
-            ))
+            ));
         }
         //
         frame
+    }
+}
+
+/// Helper to normalize samples assuming interleaved stereo
+pub fn normalize_samples(frames: &mut [f32]) {
+    // maxes
+    let mut l_a_max = 0.0;
+    let mut r_a_max = 0.0;
+
+    // get maxes
+    for l_r in frames.chunks(2) {
+        // should be stereo all around
+        assert_eq!(l_r.len(), 2);
+
+        // get sample abs val
+        let l_abs = l_r[0].abs();
+        let r_abs = l_r[1].abs();
+
+        if l_abs > l_a_max {
+            l_a_max = l_abs;
+        }
+        if r_abs > r_a_max {
+            r_a_max = r_abs
+        }
+    }
+
+    // norm ratios
+    let l_n_ratio = 1.0 / l_a_max;
+    let r_n_ratio = 1.0 / r_a_max;
+
+    //
+    for l_r in frames.chunks_mut(2) {
+        // should be stereo all around
+        assert_eq!(l_r.len(), 2);
+
+        // apply ratios
+        l_r[0] *= l_n_ratio;
+        l_r[1] *= r_n_ratio;
     }
 }

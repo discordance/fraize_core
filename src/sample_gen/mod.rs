@@ -25,8 +25,8 @@ use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
 use self::time_calc::{Beats, Ppqn};
-use std::collections::HashMap;
 use control::ControlMessage;
+use std::collections::HashMap;
 
 /// pulse per quarter note
 pub const PPQN: Ppqn = 24;
@@ -105,11 +105,15 @@ impl SmartBuffer {
 
         // samples preparation
         // @TODO must check better the wave formats
-        let samples: Vec<f32> = reader
+        let mut samples: Vec<f32> = reader
             .into_samples::<i16>()
             .filter_map(Result::ok)
             .map(i16::to_sample::<f32>)
             .collect();
+
+        // normalize samples
+        // for consistency in volumes + better analysis
+        gen_utils::normalize_samples(&mut samples[..]);
 
         // store in frames format
         let frames = sample::slice::to_frame_slice(&samples[..]).unwrap() as &[Stereo<f32>]; // needed to be explicit
@@ -121,7 +125,7 @@ impl SmartBuffer {
         Ok(true)
     }
 
-    /// perform analysis
+    /// perform various sample analysis
     fn analyse(&mut self, samples: &[f32], path: &str) {
         // parse tempo from filename
         let (orig_tempo, beats) = analytics::get_original_tempo(path, samples.len());
@@ -129,40 +133,57 @@ impl SmartBuffer {
         self.num_beats = beats;
 
         // detect tempo via aubio
-        // @TODO implement it properly
+        // @TODO use it properly
         let _detected_tempo = analytics::detect_bpm(&samples[..]);
 
-        // compute onset positions and store them in the hashmap
+        // compute onset positions
         let onset_positions = analytics::detect_onsets(&samples[..]);
-        let quantized = analytics::quantize_pos(
-            &onset_positions,
-            self.frames.len() / (16 * beats),
-        );
 
-        // store quantized onsets
-        self.positions
-            .insert(PositionsMode::QonsetMode(), quantized);
+        self.set_postions(samples, beats, onset_positions);
+    }
 
-        // store detected onsets
-        self.positions
-            .insert(PositionsMode::OnsetMode(), onset_positions);
+    /// setup positions for the smart buffer
+    fn set_postions(&mut self, samples: &[f32], beats: usize, onset_positions: Vec<usize>) {
+        // sometime we can't calculate onsets
+        if onset_positions.len() > 2 {
+            // quantize onset for the quantized mode
+            let quantized =
+                analytics::quantize_pos(&onset_positions, self.frames.len() / (16 * beats));
 
+            // store quantized onsets
+            self.positions
+                .insert(PositionsMode::QonsetMode(), quantized);
+
+            // store detected onsets
+            self.positions
+                .insert(PositionsMode::OnsetMode(), onset_positions);
+        } else {
+            // replace detected onsets by 8 div
+            self.positions.insert(
+                PositionsMode::QonsetMode(),
+                analytics::slice_onsets(samples.len() / 2, ((beats / 4) * 8) as usize),
+            );
+
+            // replace detected onsets by 8 div
+            self.positions.insert(
+                PositionsMode::OnsetMode(),
+                analytics::slice_onsets(samples.len() / 2, ((beats / 4) * 8) as usize),
+            );
+        }
         // store slice onsets
         self.positions.insert(
             PositionsMode::Bar4Mode(),
-            analytics::slice_onsets(samples.len()/2, ((beats / 4) * 4) as usize),
+            analytics::slice_onsets(samples.len() / 2, ((beats / 4) * 4) as usize),
         );
-
         // store slice onsets
         self.positions.insert(
             PositionsMode::Bar8Mode(),
-            analytics::slice_onsets(samples.len()/2, ((beats / 4) * 8) as usize),
+            analytics::slice_onsets(samples.len() / 2, ((beats / 4) * 8) as usize),
         );
-
         // store slice onsets
         self.positions.insert(
             PositionsMode::Bar16Mode(),
-            analytics::slice_onsets(samples.len()/2, ((beats / 4) * 16) as usize),
+            analytics::slice_onsets(samples.len() / 2, ((beats / 4) * 16) as usize),
         );
     }
 }
@@ -293,5 +314,4 @@ pub trait SampleGenerator {
     fn set_loop_div(&mut self, loop_div: u64);
     /// Used to pass control message that triggers actions specific to SampleGenerator implementations
     fn push_control_message(&mut self, message: ControlMessage);
-
 }

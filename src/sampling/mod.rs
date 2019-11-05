@@ -155,7 +155,7 @@ pub fn init_lib(conf: Config) -> Result<SampleLib, Box<dyn Error>> {
                                     let fpath = fpath.to_str().unwrap(); // NoneError doesnt not implem Boxed Error
                                                                          // sets name
                                     buffer.file_name = String::from(file_name.to_str().unwrap());
-                                    buffer.load_wave(fpath);
+                                    buffer.load_wave(fpath).expect("all waves must be loadable");
 
                                     // push
                                     buffs.push(buffer);

@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 /// Used to define slicer fadeins fadeouts in samples
 const SLICE_FADE_IN: usize = 64;
 const SLICE_FADE_OUT: usize = 1024 * 2;
-const SLICER_MICRO_FADE: usize = 64;
+const SLICER_MICRO_FADE: usize = 128;
 
 /// A Slice struct
 /// should be copied
@@ -124,7 +124,7 @@ struct SliceSeq {
     /// manage transforms
     transform: Transform,
     /// useful to perform a micro fade when swaping buffers
-    buffer_swap_fade: super::gen_utils::MicroFade
+    buffer_swap_fade: super::gen_utils::MicroFade,
 }
 
 impl SliceSeq {
@@ -256,6 +256,7 @@ impl SliceSeq {
                 // NEW SLICE !
                 // current slice is not the one that should be, time to switch !
                 if self.current_slice.id != curr_slice.id {
+                    //                    println!("new slice");
                     // apply transforms at new slice is better
                     match &self.transform.next_transform {
                         None => {
