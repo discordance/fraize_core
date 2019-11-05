@@ -51,7 +51,7 @@ pub enum PositionsMode {
 }
 
 /// Basically an audio buffer (in frame format) with some metadata from analysis.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SmartBuffer {
     /// Keeps track of the audio file name.
     pub file_name: String,
@@ -202,7 +202,7 @@ struct SampleGen {
 impl SampleGen {
     /// Synchronize the frame index.
     /// Inits the Fade Out / Fade In Mechanism
-    fn sync_frame_index(&mut self, new_index: u64) {
+    fn sync_set_frame_index(&mut self, new_index: u64) {
         self.sync_cursor = 0;
         self.sync_next_frame_index = new_index;
     }
