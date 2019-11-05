@@ -117,7 +117,7 @@ impl SampleGenerator for RePitchGen {
             // simple update
             self.sample_gen.playback_rate = new_rate;
             // sync to the clock estimated frame index
-            self.sample_gen.sync_frame_index(clock_frames);
+            self.sample_gen.sync_set_frame_index(clock_frames);
         }
     }
 

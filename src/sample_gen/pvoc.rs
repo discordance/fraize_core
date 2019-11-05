@@ -297,7 +297,7 @@ impl SampleGenerator for PVOCGen {
             // simple update
             self.sample_gen.playback_rate = new_rate;
             // set the frameindex relative to the mixer ticks
-            self.sample_gen.sync_frame_index(clock_frames);
+            self.sample_gen.sync_set_frame_index(clock_frames);
             // needs to reset the PVOC
             self.pvoc_1.reset();
         }
