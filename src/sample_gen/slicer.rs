@@ -12,6 +12,8 @@ use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use control::{ControlMessage, SlicerMessage};
 use std::collections::BTreeMap;
 
+
+
 /// Used to define slicer fadeins fadeouts in samples
 const SLICE_FADE_IN: usize = 64;
 const SLICE_FADE_OUT: usize = 1024 * 2;
@@ -153,7 +155,7 @@ impl SliceSeq {
                 // clone only one time !
                 self.local_frames = Some(buffer.frames.clone());
             }
-            Some(local) => {
+            Some(local) => { // does not allocate CHECKED
                 // extends if needed
                 local.resize(buffer.frames.len(), Stereo::<f32>::equilibrium());
                 // copy frames of the buffer in the local buffer
@@ -164,7 +166,7 @@ impl SliceSeq {
         // get positions
         let positions = &buffer.positions[&self.positions_mode];
 
-        // cleared but memory is kept
+        // @TODO DOES ALLOCATE
         self.slices_orig.clear();
 
         // iterate and set
@@ -181,8 +183,9 @@ impl SliceSeq {
         }
 
         // ...
-        // @TODO not allocate
-        self.t_slices = self.slices_orig.clone();
+        // @TODO DOES ALLOCATE
+        self.t_slices.clear();
+        self.t_slices.extend(self.slices_orig.iter());
 
         // init the first slice
         self.current_slice = *self.slices_orig.get(&0).unwrap();
@@ -435,7 +438,7 @@ impl SampleGenerator for SlicerGen {
     /// Loads a SmartBuffer from a reference
     fn load_buffer(&mut self, smartbuf: &SmartBuffer) {
         // simply clone in the buffer
-        self.sample_gen.smartbuf.copy_from_ref(smartbuf);
+        self.sample_gen.smartbuf.copy_from(smartbuf);
         self.slice_seq.safe_load_buffer(smartbuf);
     }
 

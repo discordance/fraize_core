@@ -13,6 +13,8 @@
 extern crate hound;
 extern crate sample;
 extern crate time_calc;
+//extern crate trallocator;
+
 
 // re-publish submodule repitch as a public module;
 pub mod analytics;
@@ -28,6 +30,11 @@ use self::time_calc::{Beats, Ppqn};
 use control::ControlMessage;
 use std::collections::HashMap;
 
+//use std::alloc::System;
+//#[global_allocator]
+//static GLOBAL: trallocator::Trallocator<System> = trallocator::Trallocator::new(System);
+
+
 /// pulse per quarter note
 pub const PPQN: Ppqn = 24;
 
@@ -36,7 +43,7 @@ const NOCLICK_FADE_LENGTH: u64 = 64;
 
 /// SliceMode defines how the slices are cut in a smart buffer.
 /// Can be OnsetDetection or fixed BAR divisions.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PositionsMode {
     /// Natural detected onsets.
     OnsetMode(),
@@ -71,25 +78,43 @@ impl SmartBuffer {
     /// returns an empty SmartBuffer, without allocation ?
     pub fn new_empty() -> Self {
         SmartBuffer {
-            frames: Vec::new(),
-            file_name: String::from(""),
+            frames: Vec::with_capacity(1024),
+            file_name: String::with_capacity(512),
             original_tempo: 120.0,
             num_beats: 4,
-            positions: HashMap::<PositionsMode, Vec<usize>>::new(),
+            positions: HashMap::<PositionsMode, Vec<usize>>::with_capacity(512),
         }
     }
 
-    /// Copy SmartBuffer from ref
-    pub fn copy_from_ref(&mut self, from: &SmartBuffer) {
+    /// Copy SmartBuffer without memory allocations
+    pub fn copy_from(&mut self, from: &SmartBuffer) {
+//        let before = GLOBAL.get() as i64;
         // start by the frames
         self.frames
             .resize(from.frames.len(), Stereo::<f32>::equilibrium());
         self.frames.copy_from_slice(&from.frames[..]);
+
         // copy the fields
-        self.file_name = from.file_name.clone(); // @TODO clone?
+        self.file_name.clear();
+        self.file_name.push_str(from.file_name.as_str());
         self.num_beats = from.num_beats;
         self.original_tempo = from.original_tempo;
-        self.positions = from.positions.clone(); // @TODO clone?
+
+        // clone if empty
+        if self.positions.len() == 0 {
+            self.positions = from.positions.clone();
+        } else {
+            // trick to avoid mem allocs
+            for (key, val) in self.positions.iter_mut() {
+                println!("k {:?}", *key);
+                let mut from_vec = &from.positions.get(key).unwrap();
+                val.resize(from_vec.len(), 0);
+                val.copy_from_slice(&from_vec[..]);
+            }
+        }
+
+//        let after = GLOBAL.get() as i64;
+//        println!("memory diff: {} bytes", after-before);
     }
 
     /// Loads and analyse a wave file

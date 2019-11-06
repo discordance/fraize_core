@@ -32,5 +32,8 @@ git = "https://github.com/discordance/cpal.git"
 git = "https://github.com/discordance/aubio-rs.git"
 #path = "../aubio-rs"
 
+[dependencies.trallocator]
+path = "../trallocator"
+
 [profile.dev]
 opt-level = 2
