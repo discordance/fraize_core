@@ -1,6 +1,7 @@
 extern crate rand;
 extern crate sample;
 extern crate time_calc;
+//extern crate trallocator;
 
 use std::time::{Duration, Instant};
 
@@ -10,8 +11,11 @@ use self::sample::Frame;
 use self::time_calc::Ticks;
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use control::{ControlMessage, SlicerMessage};
-use std::collections::BTreeMap;
-
+use std::collections::{HashMap};
+//
+//use std::alloc::System;
+//#[global_allocator]
+//static GLOBAL: trallocator::Trallocator<System> = trallocator::Trallocator::new(System);
 
 
 /// Used to define slicer fadeins fadeouts in samples
@@ -105,12 +109,94 @@ struct Transform {
     next_transform: Option<TransformType>,
 }
 
+/// a SliceMap is useful encapsulation to perform transform on slice with hashmap and sorted keys index
+/// maybe not very efficient but at least pre-allocated
+/// no support for remove as we trash all everytime
+#[derive(Debug, Clone)]
+struct SliceMap {
+    /// Hashmap of all slices, unordered by the datastruct
+    unord_slices: HashMap<usize, Slice>,
+    /// keeps an ordered copy of the keys
+    ord_keys: Vec<usize>,
+    /// a buffer allowing to apply transforms to ord_keys
+    mangle_keys: Vec<usize>
+}
+
+impl SliceMap {
+    /// new with allocation !
+    fn new() -> Self {
+        SliceMap{
+            unord_slices: HashMap::with_capacity(128),
+            ord_keys: Vec::with_capacity(128),
+            mangle_keys: Vec::with_capacity(128),
+        }
+    }
+
+    // clear keeps allocated memory
+    fn clear(&mut self) {
+        self.unord_slices.clear();
+        self.ord_keys.clear();
+        assert_eq!(self.unord_slices.len(), self.ord_keys.len());
+    }
+
+    // insert
+    fn insert(&mut self, k: usize, v: Slice) {
+        // insert in hashmap
+        self.unord_slices.insert(k, v);
+        // insert in keys
+        self.ord_keys.push(k);
+        // resort
+        self.ord_keys[..].sort();
+        assert_eq!(self.unord_slices.len(), self.ord_keys.len());
+    }
+
+    // get from the hashmap
+    fn get(&self, idx: &usize) -> Option<&Slice> {
+        self.unord_slices.get(idx)
+    }
+
+    // get ordered_keys
+    fn ord_keys(&self) -> &[usize] {
+        &self.ord_keys[..]
+    }
+
+    // copy from another slice map
+    fn copy_from(&mut self, other: &Self) {
+        self.clear();
+        self.unord_slices.extend(&other.unord_slices);
+        self.ord_keys.resize(other.ord_keys.len(), 0);
+        self.ord_keys.copy_from_slice(&other.ord_keys[..]);
+        assert_eq!(self.unord_slices.len(), self.ord_keys.len());
+    }
+
+    // shuffle the slices while keeping the keys order
+    // needs to be passed the old slicemap as we are manipulating this one
+    fn shuffle(&mut self, old_map: &Self) {
+        // will use mangle_keys, need to resize just in case
+        self.mangle_keys.resize(self.ord_keys.len(), 0);
+        self.mangle_keys.copy_from_slice(&self.ord_keys[..]);
+
+        // shuffle mangle_keys
+        rand::thread_rng().shuffle(&mut self.mangle_keys);
+
+        // swap pairwise
+        for (idx, slice_index) in self.mangle_keys.iter_mut().enumerate() {
+            // get slice from older
+            let new = *old_map.get(&slice_index).unwrap(); // should not fail
+
+            // get the slice in mutable
+            let mut old_slice = self.unord_slices.get_mut(&self.ord_keys[idx]).unwrap(); // should not fail;
+            // replace
+            *old_slice = new;
+        }
+    }
+}
+
+
 /// A Slice Sequencer
 /// Usefull to order and re-order the slices in any order
 /// BTreeMap Keys are the sample index of the start slices at original playback speed
 /// By default the keys are given by the buffer onset positions, depending the mode
-/// @TODO missing a fade in out when appling transforms
-/// @TODO ugly allocations
 #[derive(Debug, Clone)]
 struct SliceSeq {
     /// Holds a local copy of the gen frame buffer, so it can change without clicks
@@ -118,9 +204,9 @@ struct SliceSeq {
     /// Positions mode define which kind of positions to use in the slicer
     positions_mode: super::PositionsMode,
     /// Slices ordered according to the keys, in orginal order
-    slices_orig: BTreeMap<usize, Slice>,
+    slices_orig: SliceMap,
     /// Transformed slices this hold the result of any transformation
-    t_slices: BTreeMap<usize, Slice>,
+    t_slices: SliceMap,
     /// curently playing slice that will be consumed
     current_slice: Slice,
     /// manage transforms
@@ -166,7 +252,6 @@ impl SliceSeq {
         // get positions
         let positions = &buffer.positions[&self.positions_mode];
 
-        // @TODO DOES ALLOCATE
         self.slices_orig.clear();
 
         // iterate and set
@@ -182,10 +267,8 @@ impl SliceSeq {
             );
         }
 
-        // ...
-        // @TODO DOES ALLOCATE
-        self.t_slices.clear();
-        self.t_slices.extend(self.slices_orig.iter());
+        //
+        self.t_slices.copy_from(&self.slices_orig);
 
         // init the first slice
         self.current_slice = *self.slices_orig.get(&0).unwrap();
@@ -227,28 +310,30 @@ impl SliceSeq {
 
                 // perform the next slice computation
                 // give a nice ordered list of start slices
-                let kz = self.t_slices.keys();
+                let kz = self.t_slices.ord_keys();
 
                 // elegant and ugly at the same time
                 // find the first slice index in sample that is just above the frame_index
-                let curr_slice_idx = kz
+                let curr_slice_idx = kz.iter()
                     .rev()
                     .find(|s| **s <= (clock_frames as usize) % local_frames.len());
 
                 // check the curr_slice_idx, if none, it is the last
-                let (curr_slice_idx, curr_slice) = match curr_slice_idx {
+                let curr_slice_idx = match curr_slice_idx {
                     None => (
-                        *self.t_slices.keys().last().unwrap(),
-                        *self.t_slices.values().last().unwrap(),
+                        *self.t_slices.ord_keys().last().unwrap()
                     ),
-                    Some(idx) => (*idx, *self.t_slices.get(idx).unwrap()),
+                    Some(idx) => *idx
                 };
 
+                // fetch current slice
+                let curr_slice = *self.t_slices.get(&curr_slice_idx).unwrap();
+
                 // shadow kv
-                let mut kz = self.slices_orig.keys();
+//                let mut kz = self.slices_orig.ord_keys();
 
                 // get the next slice idx
-                let next_slice_idx = kz.find(|s| **s > curr_slice_idx);
+                let next_slice_idx = kz.iter().find(|s| **s > curr_slice_idx);
 
                 // need to look ahead of time to fix glitches in shuffling non equal len slices
                 let next_slice_idx = match next_slice_idx {
@@ -290,7 +375,7 @@ impl SliceSeq {
 
                     // fix for shuffle and mismatching length
                     if curr_slice_idx < next_slice_idx {
-                        let real_len = (next_slice_idx - curr_slice_idx);
+                        let real_len = next_slice_idx - curr_slice_idx;
                         if adjusted_len > real_len {
                             adjusted_len = real_len
                         }
@@ -329,36 +414,14 @@ impl SliceSeq {
 
     /// reset the slices !
     fn do_reset(&mut self) {
-        // @TODO not allocate
-        self.t_slices = self.slices_orig.clone();
+        self.t_slices.copy_from(&self.slices_orig);
     }
 
     /// Shuffles the slices ! Can introduce clicks if done in the middle
     /// safe_shuffle should be used instead
-    /// @TODO 2 mem allocation
     fn do_shuffle(&mut self) {
         // shuffle the keys
-        // will be shuffled
-        // @TODO not allocate
-        let mut kz: Vec<usize> = self.slices_orig.keys().map(|k| *k).collect();
-
-        // keep the original keys
-        // @TODO not allocate
-        let orig = kz.clone();
-
-        // shuffle
-        rand::thread_rng().shuffle(&mut kz);
-
-        // clear
-        self.t_slices.clear();
-
-        // swap pairwise
-        for (idx, slice_index) in kz.iter().enumerate() {
-            let mut new = *self.slices_orig.get(&slice_index).unwrap();
-            let old = self.slices_orig.get(&orig[idx]).unwrap();
-            // @TODO not allocate
-            self.t_slices.insert(orig[idx], new);
-        }
+       self.t_slices.shuffle(&self.slices_orig);
     }
 }
 
@@ -390,10 +453,10 @@ impl SlicerGen {
             },
             slice_seq: SliceSeq {
                 local_frames: None, // one sec
-                slices_orig: BTreeMap::new(),
-                t_slices: BTreeMap::new(),
+                slices_orig: SliceMap::new(),
+                t_slices: SliceMap::new(),
                 current_slice: Default::default(),
-                positions_mode: super::PositionsMode::OnsetMode(),
+                positions_mode: super::PositionsMode::QonsetMode(),
                 transform: Default::default(),
                 buffer_swap_fade: Default::default(),
             },
@@ -437,7 +500,6 @@ impl SampleGenerator for SlicerGen {
 
     /// Loads a SmartBuffer from a reference
     fn load_buffer(&mut self, smartbuf: &SmartBuffer) {
-        // simply clone in the buffer
         self.sample_gen.smartbuf.copy_from(smartbuf);
         self.slice_seq.safe_load_buffer(smartbuf);
     }
@@ -464,7 +526,6 @@ impl SampleGenerator for SlicerGen {
     }
 
     /// sets play
-    /// @TODO Notify Error if no frame sto read.println.
     fn play(&mut self) {
         // check if the smart buffer is ready
         if self.sample_gen.smartbuf.frames.len() > 0 {
@@ -503,10 +564,16 @@ impl SampleGenerator for SlicerGen {
             } => match message {
                 SlicerMessage::Transform(t) => match t {
                     TransformType::Reset() => {
+//                        let before = GLOBAL.get() as i64;
                         self.slice_seq.safe_reset();
+//                        let after = GLOBAL.get() as i64;
+//                        println!("safe_reset memory diff: {} bytes", after-before);
                     }
                     TransformType::Shuffle() => {
+//                        let before = GLOBAL.get() as i64;
                         self.slice_seq.safe_shuffle();
+//                        let after = GLOBAL.get() as i64;
+//                        println!("safe_shuffle memory diff: {} bytes", after-before);
                     }
                 },
             },
