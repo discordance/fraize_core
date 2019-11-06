@@ -23,7 +23,8 @@ const SLICE_FADE_IN: usize = 64;
 const SLICE_FADE_OUT: usize = 1024 * 2;
 const SLICER_MICRO_FADE: usize = 128;
 
-/// A Slice struct
+/// A Slice struct, represnte a slice of audio in the buffer
+/// Doesn't store any audio data, but start and end index
 /// should be copied
 #[derive(Debug, Default, Copy, Clone)]
 struct Slice {
@@ -329,9 +330,6 @@ impl SliceSeq {
                 // fetch current slice
                 let curr_slice = *self.t_slices.get(&curr_slice_idx).unwrap();
 
-                // shadow kv
-//                let mut kz = self.slices_orig.ord_keys();
-
                 // get the next slice idx
                 let next_slice_idx = kz.iter().find(|s| **s > curr_slice_idx);
 
@@ -341,9 +339,8 @@ impl SliceSeq {
                     Some(nidx) => *nidx,
                 };
 
-                // NEW SLICE !
                 // current slice is not the one that should be, time to switch !
-                if self.current_slice.id != curr_slice.id {
+                if self.current_slice.id != curr_slice.id { // NEW SLICE !
                     //                    println!("new slice");
                     // apply transforms at new slice is better
                     match &self.transform.next_transform {
