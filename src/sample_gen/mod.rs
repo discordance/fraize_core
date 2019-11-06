@@ -106,7 +106,6 @@ impl SmartBuffer {
         } else {
             // trick to avoid mem allocs
             for (key, val) in self.positions.iter_mut() {
-                println!("k {:?}", *key);
                 let mut from_vec = &from.positions.get(key).unwrap();
                 val.resize(from_vec.len(), 0);
                 val.copy_from_slice(&from_vec[..]);
