@@ -8,15 +8,14 @@ use std::time::{Duration, Instant};
 use self::rand::Rng;
 use self::sample::frame::Stereo;
 use self::sample::Frame;
-use self::time_calc::Ticks;
+use self::time_calc::{Beats, Samples, Ticks, TimeSig};
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use control::{ControlMessage, SlicerMessage};
-use std::collections::{HashMap};
+use std::collections::HashMap;
 //
 //use std::alloc::System;
 //#[global_allocator]
 //static GLOBAL: trallocator::Trallocator<System> = trallocator::Trallocator::new(System);
-
 
 /// Used to define slicer fadeins fadeouts in samples
 const SLICE_FADE_IN: usize = 64;
@@ -101,13 +100,13 @@ pub enum TransformType {
     Reset(),
     /// Shuffle all the slices randomly
     Shuffle(),
-}
-
-/// Help to smoothly apply transformation with fadeout.
-#[derive(Debug, Default, Clone)]
-struct Transform {
-    /// stores the next transform to be applied
-    next_transform: Option<TransformType>,
+    /// Repeat a given Slice on index according to a defined quantization in bar div
+    QuantRepeat {
+        // our length relative to bar div
+        quant: usize,
+        // the slice to repeat forever
+        slice_index: usize,
+    },
 }
 
 /// a SliceMap is useful encapsulation to perform transform on slice with hashmap and sorted keys index
@@ -120,13 +119,13 @@ struct SliceMap {
     /// keeps an ordered copy of the keys
     ord_keys: Vec<usize>,
     /// a buffer allowing to apply transforms to ord_keys
-    mangle_keys: Vec<usize>
+    mangle_keys: Vec<usize>,
 }
 
 impl SliceMap {
     /// new with allocation !
     fn new() -> Self {
-        SliceMap{
+        SliceMap {
             unord_slices: HashMap::with_capacity(128),
             ord_keys: Vec::with_capacity(128),
             mangle_keys: Vec::with_capacity(128),
@@ -187,12 +186,29 @@ impl SliceMap {
 
             // get the slice in mutable
             let mut old_slice = self.unord_slices.get_mut(&self.ord_keys[idx]).unwrap(); // should not fail;
-            // replace
+                                                                                         // replace
             *old_slice = new;
         }
     }
-}
 
+    // repeat the slice over a quant in sample
+    fn quant_repeat(&mut self, quant: usize, slice_idx: usize, max: usize) {
+        // copy the slice to repeat
+        let mut to_repeat = *self.unord_slices.get(&slice_idx).unwrap();
+
+        // clear
+        self.clear();
+
+        // used to assign new id
+        let mut ct: usize = 0;
+        for x in (0..max).step_by(quant) {
+            // pass a new id
+            to_repeat.id = ct;
+            self.insert(x, to_repeat);
+            ct += 1;
+        }
+    }
+}
 
 /// A Slice Sequencer
 /// Usefull to order and re-order the slices in any order
@@ -202,6 +218,8 @@ impl SliceMap {
 struct SliceSeq {
     /// Holds a local copy of the gen frame buffer, so it can change without clicks
     local_frames: Option<Vec<Stereo<f32>>>,
+    /// Original tempo is useful for some transforms
+    orig_tempo: f64,
     /// Positions mode define which kind of positions to use in the slicer
     positions_mode: super::PositionsMode,
     /// Slices ordered according to the keys, in orginal order
@@ -211,7 +229,7 @@ struct SliceSeq {
     /// curently playing slice that will be consumed
     current_slice: Slice,
     /// manage transforms
-    transform: Transform,
+    next_transform: Option<TransformType>,
     /// useful to perform a micro fade when swaping buffers
     buffer_swap_fade: super::gen_utils::MicroFade,
 }
@@ -242,13 +260,17 @@ impl SliceSeq {
                 // clone only one time !
                 self.local_frames = Some(buffer.frames.clone());
             }
-            Some(local) => { // does not allocate CHECKED
+            Some(local) => {
+                // does not allocate CHECKED
                 // extends if needed
                 local.resize(buffer.frames.len(), Stereo::<f32>::equilibrium());
                 // copy frames of the buffer in the local buffer
                 local.copy_from_slice(&buffer.frames[..]);
             }
         }
+
+        // sets the original tempo
+        self.orig_tempo = buffer.original_tempo;
 
         // get positions
         let positions = &buffer.positions[&self.positions_mode];
@@ -315,16 +337,15 @@ impl SliceSeq {
 
                 // elegant and ugly at the same time
                 // find the first slice index in sample that is just above the frame_index
-                let curr_slice_idx = kz.iter()
+                let curr_slice_idx = kz
+                    .iter()
                     .rev()
                     .find(|s| **s <= (clock_frames as usize) % local_frames.len());
 
                 // check the curr_slice_idx, if none, it is the last
                 let curr_slice_idx = match curr_slice_idx {
-                    None => (
-                        *self.t_slices.ord_keys().last().unwrap()
-                    ),
-                    Some(idx) => *idx
+                    None => (*self.t_slices.ord_keys().last().unwrap()),
+                    Some(idx) => *idx,
                 };
 
                 // fetch current slice
@@ -340,10 +361,12 @@ impl SliceSeq {
                 };
 
                 // current slice is not the one that should be, time to switch !
-                if self.current_slice.id != curr_slice.id { // NEW SLICE !
-                    //                    println!("new slice");
+                // be careful when applying transforms to slice, new IDS have to be provided
+                // or it will get stuck. 10.0.17763.0
+                if self.current_slice.id != curr_slice.id {
+                    // NEW SLICE !
                     // apply transforms at new slice is better
-                    match &self.transform.next_transform {
+                    match &self.next_transform {
                         None => {
                             // no transform
                             // actual switch
@@ -359,11 +382,31 @@ impl SliceSeq {
                                     // apply shuffle
                                     self.do_shuffle();
                                 }
+                                TransformType::QuantRepeat {
+                                    quant,
+                                    slice_index: _,
+                                } => {
+                                    // need a local buffer
+                                    if let Some(f) = &self.local_frames {
+                                        // how many bars we have
+                                        let num_bars = Samples(f.len() as i64).bars(
+                                            self.orig_tempo,
+                                            TimeSig { top: 4, bottom: 4 },
+                                            44_100.0,
+                                        );
+
+                                        // convert the div in samples
+                                        let mut quant_samples = f.len() / num_bars as usize;
+                                        quant_samples /= *quant;
+
+                                        self.do_quant_repeat(quant_samples, curr_slice_idx);
+                                    }
+                                }
                             }
                             // go back to 1
                             // maybe no good
                             self.current_slice = *self.t_slices.get(&0).unwrap();
-                            self.transform.next_transform = None;
+                            self.next_transform = None;
                         }
                     }
 
@@ -377,8 +420,14 @@ impl SliceSeq {
                             adjusted_len = real_len
                         }
                     } else {
-                        // local_frames could not be empty at this stage
-                        adjusted_len = self.local_frames.as_ref().unwrap().len() - curr_slice_idx;
+                        // if the last slice len is greater than the buffer end, we cut
+                        if curr_slice.start + curr_slice.len()
+                            > self.local_frames.as_ref().unwrap().len()
+                        {
+                            adjusted_len =
+                                self.local_frames.as_ref().unwrap().len() - curr_slice_idx;
+                            // local_frames could not be empty at this stage
+                        }
                     }
 
                     // fix for faster playback rate
@@ -395,19 +444,7 @@ impl SliceSeq {
         }
     }
 
-    /// safe reset
-    /// will wait new slice to kick in
-    fn safe_reset(&mut self) {
-        // set next transform
-        self.transform.next_transform = Some(TransformType::Reset());
-    }
-
-    /// safe shuffle
-    /// will wait new slice to kick in
-    fn safe_shuffle(&mut self) {
-        // set next transform
-        self.transform.next_transform = Some(TransformType::Shuffle());
-    }
+    // transforms
 
     /// reset the slices !
     fn do_reset(&mut self) {
@@ -418,12 +455,20 @@ impl SliceSeq {
     /// safe_shuffle should be used instead
     fn do_shuffle(&mut self) {
         // shuffle the keys
-       self.t_slices.shuffle(&self.slices_orig);
+        self.t_slices.shuffle(&self.slices_orig);
+    }
+
+    /// Repeat a slice accoding to a quantization in samples
+    fn do_quant_repeat(&mut self, quant_samples: usize, slice_idx: usize) {
+        if let Some(f) = &self.local_frames {
+            self.t_slices
+                .quant_repeat(quant_samples, slice_idx, f.len());
+        }
     }
 }
 
 /// Slicer sample generator.
-/// Use a method inspired by Beat Slicers.
+/// Use a method inspired by Beat Slicers like Propellerheads Reason.
 pub struct SlicerGen {
     /// parent SampleGen struct, as struct composition.
     sample_gen: SampleGen,
@@ -450,11 +495,12 @@ impl SlicerGen {
             },
             slice_seq: SliceSeq {
                 local_frames: None, // one sec
+                orig_tempo: 120.0,
                 slices_orig: SliceMap::new(),
                 t_slices: SliceMap::new(),
                 current_slice: Default::default(),
                 positions_mode: super::PositionsMode::QonsetMode(),
-                transform: Default::default(),
+                next_transform: None,
                 buffer_swap_fade: Default::default(),
             },
         }
@@ -499,6 +545,10 @@ impl SampleGenerator for SlicerGen {
     fn load_buffer(&mut self, smartbuf: &SmartBuffer) {
         self.sample_gen.smartbuf.copy_from(smartbuf);
         self.slice_seq.safe_load_buffer(smartbuf);
+//        self.slice_seq.next_transform = Some(TransformType::QuantRepeat {
+//            quant: 4,
+//            slice_index: 0,
+//        });
     }
 
     /// Sync the slicer according to a clock
@@ -520,6 +570,13 @@ impl SampleGenerator for SlicerGen {
             // simple update
             self.sample_gen.playback_rate = new_rate;
         }
+
+        //        if self.sample_gen.is_beat_frame() {
+        //            self.slice_seq.next_transform = Some(TransformType::QuantRepeat {
+        //                quant: 4,
+        //                slice_index: 0,
+        //            });
+        //        }
     }
 
     /// sets play
@@ -559,27 +616,16 @@ impl SampleGenerator for SlicerGen {
                 track_num: _,
                 message,
             } => match message {
-                SlicerMessage::Transform(t) => match t {
-                    TransformType::Reset() => {
-//                        let before = GLOBAL.get() as i64;
-                        self.slice_seq.safe_reset();
-//                        let after = GLOBAL.get() as i64;
-//                        println!("safe_reset memory diff: {} bytes", after-before);
-                    }
-                    TransformType::Shuffle() => {
-//                        let before = GLOBAL.get() as i64;
-                        self.slice_seq.safe_shuffle();
-//                        let after = GLOBAL.get() as i64;
-//                        println!("safe_shuffle memory diff: {} bytes", after-before);
-                    }
-                },
+                SlicerMessage::Transform(t) => {
+                    self.slice_seq.next_transform = Some(t);
+                }
             },
             _ => (), // ignore the rest
         }
     }
 }
 
-/// Implement `Iterator` for `RePitchGen`.
+/// Implement `Iterator` for `SliceGen`.
 impl Iterator for SlicerGen {
     /// returns stereo frames
     type Item = Stereo<f32>;
