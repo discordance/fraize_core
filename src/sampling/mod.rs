@@ -20,7 +20,7 @@ impl SampleLib {
         match self.buffers.get(bank) {
             Some(b) => {
                 // take the first
-                let first = match b.first() {
+                match b.first() {
                     Some(x) => {
                         return &x.file_name;
                     }
@@ -36,7 +36,7 @@ impl SampleLib {
         match self.buffers.get(bank) {
             Some(b) => {
                 // take the first
-                let first = match b.first() {
+                match b.first() {
                     Some(x) => {
                         return x;
                     }
@@ -52,7 +52,7 @@ impl SampleLib {
         match self.buffers.get(pos.0) {
             Some(b) => {
                 // take the pos
-                let first = match b.get(pos.1) {
+                match b.get(pos.1) {
                     Some(x) => {
                         return x;
                     }

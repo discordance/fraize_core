@@ -3,12 +3,10 @@ extern crate sample;
 extern crate time;
 extern crate time_calc;
 
-use self::time::PreciseTime;
-
 use self::aubio::pvoc::Pvoc;
 use self::sample::frame::Stereo;
 use self::sample::Frame;
-use self::time_calc::{Beats, Ppqn, Ticks};
+use self::time_calc::{Beats, Ticks};
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use control::ControlMessage;
 
@@ -50,7 +48,7 @@ struct PVOCUnit {
     /// Hop size (overlap size in the Pvoc).
     hop_size: usize,
     /// FFT Window size.
-    window_size: usize,
+//    window_size: usize,
     /// Analysis size.
     analysis_size: usize,
     /// Aubio wrapper Phase Vocoder instance.
@@ -199,7 +197,7 @@ impl PVOCGen {
             },
             pvoc_1: PVOCUnit {
                 hop_size: pvoc_1_hopsize,
-                window_size: pvoc_1_window_size,
+//                window_size: pvoc_1_window_size,
                 analysis_size: pvoc_1_analyse_size,
                 pvoc: Pvoc::new(pvoc_1_window_size, pvoc_1_hopsize).expect("Pvoc::new"),
                 buff_pvoc_out: Vec::with_capacity(1024),
@@ -336,7 +334,7 @@ impl SampleGenerator for PVOCGen {
     }
 
     /// SampleGen impl specific control message
-    fn push_control_message(&mut self, message: ControlMessage) {
+    fn push_control_message(&mut self, _message: ControlMessage) {
         // do nothing for now
     }
 }

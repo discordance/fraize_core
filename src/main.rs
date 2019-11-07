@@ -13,11 +13,13 @@ mod osc;
 mod sample_gen;
 mod sampling;
 
-
-
-
-
-
+///
+///     |~~~~~~~~~~~~|
+///     |~~~~~~~~~~~~|
+///     |            |
+/// /~~\|        /~~\|
+/// \__/         \__/
+/// Musicalement votre. Pouet.
 fn main() {
     // ->
     println!("Hello Sampler");
@@ -32,7 +34,7 @@ fn main() {
     let (osc_thread, osc_in, osc_out_rx) = osc::initialize_osc(conf.clone());
 
     // init the control hub
-    let (control_hub, hub_rx) = control::ControlHub::new(conf.clone(), osc_in, osc_out_rx, midi_rx);
+    let (_control_hub, hub_rx) = control::ControlHub::new(conf.clone(), osc_in, osc_out_rx, midi_rx);
 
     // init audio
     let audio_thread = audio::initialize_audio(conf.clone(), hub_rx);
@@ -47,5 +49,11 @@ fn main() {
     match midi_thread.join() {
         Ok(_) => println!("Midi Thread Exited Successfully"),
         Err(_) => println!("Midi Thread Errored"),
+    }
+
+    // wait fo osc thread to exit
+    match osc_thread.join() {
+        Ok(_) => println!("OSC Thread Exited Successfully"),
+        Err(_) => println!("OSC Thread Errored"),
     }
 }

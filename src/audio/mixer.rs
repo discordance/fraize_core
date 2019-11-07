@@ -3,8 +3,6 @@
 extern crate sample;
 extern crate crossbeam_channel;
 
-use std::any::Any;
-
 use self::sample::frame::{Frame, Stereo};
 
 use config::{Config, TrackType};

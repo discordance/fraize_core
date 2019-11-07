@@ -79,7 +79,7 @@ pub fn initialize_audio(
     // add stream
     event_loop.play_stream(stream_id);
 
-    let mut max_rms = 0.0;
+//    let mut _max_rms = 0.0;
 
     // initialize in its own thread
     let audio_thread = thread::spawn(move || {

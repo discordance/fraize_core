@@ -25,17 +25,64 @@ pub fn fade_out(t: i64, len: i64, end: i64) -> f32 {
     }
     return 1.0;
 }
-
-/// Helper to exec microfades
+/// Helper to exec microfades out
 #[derive(Debug, Default, Copy, Clone)]
-pub struct MicroFade {
+pub struct MicroFadeOut {
     /// the ramp t in samples
     cursor: usize,
     /// total micro fade time
     duration: usize,
 }
 
-impl MicroFade {
+impl MicroFadeOut {
+    /// set the micro fade at the start
+    pub fn start(&mut self, duration: usize) {
+        // needed
+        assert_eq!(duration % 2, 0);
+
+        // duration must be a multiple of 2
+        self.cursor = 0;
+        self.duration = duration;
+    }
+
+    /// advance the state of the fade and check if we are in the middle (zero crossing) position
+    pub fn next_and_check(&mut self) -> bool {
+        self.cursor += 1;
+        if self.cursor == self.duration {
+            return true;
+        }
+        return false;
+    }
+
+    /// perform micro frade on the given frame
+    pub fn fade_frame(&self, frame: Stereo<f32>) -> Stereo<f32> {
+        let d = self.duration;
+        if self.cursor < d {
+            return // fade out everything before  self.duration / 2
+              frame.scale_amp(super::gen_utils::fade_out(
+                  self.cursor as i64,
+                  d as i64,
+                  d as i64
+              ));
+        }
+        if self.cursor >= d {
+            return Stereo::<f32>::equilibrium();
+        }
+        //
+        frame
+    }
+}
+
+/// Helper to exec microfades out->in
+#[derive(Debug, Default, Copy, Clone)]
+pub struct MicroFadeOutIn {
+    /// the ramp t in samples
+    cursor: usize,
+    /// total micro fade time
+    duration: usize,
+}
+
+impl MicroFadeOutIn {
     /// set the micro fade at the start
     pub fn start(&mut self, duration: usize) {
         // needed

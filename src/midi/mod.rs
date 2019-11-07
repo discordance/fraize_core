@@ -143,14 +143,14 @@ fn midi_cb(
                                 ControlMessage::TrackLoopDiv {
                                     tcode: _,
                                     val: _,
-                                    track_num,
+                                    track_num: _,
                                 } => {
                                     unimplemented!();
                                 }
                                 ControlMessage::Slicer {
                                     tcode: _,
-                                    track_num,
-                                    message,
+                                    track_num: _,
+                                    message: _,
                                 } => {
                                     unimplemented!();
                                 }

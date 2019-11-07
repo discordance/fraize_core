@@ -165,11 +165,11 @@ impl SmoothParam {
     }
 
     /// set the next value but scaled
-    pub fn new_value_scaled(&mut self, v: f32, new_start: f32, new_end: f32) {
-        // scale
-        let nv = new_start + (new_end - new_start) * ((v - 0.0) / (1.0 - 0.0));
-        self.new_value(nv);
-    }
+//    pub fn new_value_scaled(&mut self, v: f32, new_start: f32, new_end: f32) {
+//        // scale
+//        let nv = new_start + (new_end - new_start) * ((v - 0.0) / (1.0 - 0.0));
+//        self.new_value(nv);
+//    }
 
     /// set next value
     pub fn new_value(&mut self, v: f32) {
@@ -193,17 +193,17 @@ impl SmoothParam {
 
 /// ControlHub is the central place that mux messages from MIDI / OSC ... into a unique place.
 pub struct ControlHub {
-    /// Keeps a copy of the config
-    config: Config,
-    /// Sends data to OSC
-    osc_snd: crossbeam_channel::Sender<ControlMessage>
+    // Keeps a copy of the config
+//    config: Config,
+    // Sends data to OSC
+//    osc_snd: crossbeam_channel::Sender<ControlMessage>
 }
 
 impl ControlHub {
     /// init the control hub
     pub fn new(
-        config: Config,
-        osc_send: crossbeam_channel::Sender<ControlMessage>,
+        _config: Config,
+        _osc_send: crossbeam_channel::Sender<ControlMessage>,
         osc_rcv: crossbeam_channel::Receiver<ControlMessage>,
         midi_rcv: crossbeam_channel::Receiver<ControlMessage>,
     ) -> (Self, crossbeam_channel::Receiver<ControlMessage>) {
@@ -259,8 +259,8 @@ impl ControlHub {
 
         // create the instance
         let new_hub = ControlHub {
-            config,
-            osc_snd: osc_send,
+//            config,
+//            osc_snd: osc_send,
         };
 
         // return the hub and the rx

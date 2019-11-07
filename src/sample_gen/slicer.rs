@@ -3,12 +3,10 @@ extern crate sample;
 extern crate time_calc;
 //extern crate trallocator;
 
-use std::time::{Duration, Instant};
-
 use self::rand::Rng;
 use self::sample::frame::Stereo;
 use self::sample::Frame;
-use self::time_calc::{Beats, Samples, Ticks, TimeSig};
+use self::time_calc::{Samples, Ticks, TimeSig};
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use control::{ControlMessage, SlicerMessage};
 use std::collections::HashMap;
@@ -21,6 +19,7 @@ use std::collections::HashMap;
 const SLICE_FADE_IN: usize = 64;
 const SLICE_FADE_OUT: usize = 1024 * 2;
 const SLICER_MICRO_FADE: usize = 128;
+const SLICER_T_FADE_OUT: usize = 128;
 
 /// A Slice struct, represnte a slice of audio in the buffer
 /// Doesn't store any audio data, but start and end index
@@ -40,7 +39,7 @@ struct Slice {
 impl Slice {
     /// get the next frame at cursor
     /// if the cursor is consumed, return the zero frame
-    fn next_frame(&mut self, playback_rate: f64, frames: &[Stereo<f32>]) -> Stereo<f32> {
+    fn next_frame(&mut self, _playback_rate: f64, frames: &[Stereo<f32>]) -> Stereo<f32> {
         // init with default
         let mut next_frame = Stereo::<f32>::equilibrium();
 
@@ -82,10 +81,10 @@ impl Slice {
         self.cursor == self.len()
     }
 
-    /// how many left
-    fn remaining(&self) -> usize {
-        return self.len() - self.cursor;
-    }
+//    /// how many left
+//    fn remaining(&self) -> usize {
+//        return self.len() - self.cursor;
+//    }
 
     /// get slice len
     fn len(&self) -> usize {
@@ -94,7 +93,7 @@ impl Slice {
 }
 
 /// Slice Sequence transformation types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum TransformType {
     /// Reset slices to original order
     Reset(),
@@ -185,8 +184,9 @@ impl SliceMap {
             let new = *old_map.get(&slice_index).unwrap(); // should not fail
 
             // get the slice in mutable
-            let mut old_slice = self.unord_slices.get_mut(&self.ord_keys[idx]).unwrap(); // should not fail;
-                                                                                         // replace
+            let old_slice = self.unord_slices.get_mut(&self.ord_keys[idx]).unwrap(); // should not fail;
+
+            // replace                                                                             // replace
             *old_slice = new;
         }
     }
@@ -232,11 +232,23 @@ struct SliceSeq {
     curr_slice_idx: usize,
     /// manage transforms
     next_transform: Option<TransformType>,
-    /// useful to perform a micro fade when swaping buffers
-    buffer_swap_fade: super::gen_utils::MicroFade,
+    /// useful to perform a micro fade out/in when swaping buffers
+    buffer_swap_fade: super::gen_utils::MicroFadeOutIn,
+    /// useful to perform a micro fade out when transform will be applied
+    transform_fade_out: Option<super::gen_utils::MicroFadeOut>
 }
 
 impl SliceSeq {
+    /// set transformation, take cares of the fadeout
+    fn push_transform(&mut self, t: Option<TransformType>) {
+        // set
+        self.next_transform = t;
+
+        // start fade out
+        self.transform_fade_out = Some(super::gen_utils::MicroFadeOut::default());
+        self.transform_fade_out.unwrap().start(SLICER_T_FADE_OUT); // can't fail
+    }
+
     /// Safely notice that we need to swap the local frame buffer with the new one
     /// Takes immediate action if the local buffer is empty
     fn safe_load_buffer(&mut self, buffer: &SmartBuffer) {
@@ -302,6 +314,8 @@ impl SliceSeq {
     /// get next frame according to the given frame index at seq level
     /// it uses playback_speed to adjust the slice envelope
     /// get the ref of the sample generator frames, and use a local copy
+    /// @TODO needs to apply a short fadeout when queue a transform, still have clicks sometimes
+    /// @TODO this function is way too long
     fn next_frame(
         &mut self,
         playback_rate: f64,
@@ -318,7 +332,6 @@ impl SliceSeq {
                 if self.buffer_swap_fade.next_and_check() {
                     // we need to swap the buffer
                     // copy the gen buffer into the local buffer
-                    let now = Instant::now();
                     self.do_load_buffer(gen_buffer);
 
                     // and we return here empty here
@@ -330,8 +343,14 @@ impl SliceSeq {
                     .current_slice
                     .next_frame(playback_rate, &local_frames[..]);
 
-                // apply microfrade if any
+                // apply microfrade if any for the buffer swap
                 next_frame = self.buffer_swap_fade.fade_frame(next_frame);
+
+                // check if there is a pending transform fade out and apply if its the case
+                if let Some(fo) = self.transform_fade_out.as_mut() {
+                    fo.next_and_check();
+                    next_frame = fo.fade_frame(next_frame);
+                }
 
                 // perform the next slice computation
                 // give a nice ordered list of start slices
@@ -372,13 +391,17 @@ impl SliceSeq {
                 if self.current_slice.id != curr_slice.id {
                     // NEW SLICE !
                     // apply transforms at new slice is better
-                    match &self.next_transform {
+                    let next_t = self.next_transform;
+                    match next_t {
                         None => {
                             // no transform
                             // actual switch
                             self.current_slice = curr_slice;
                         }
                         Some(transform) => {
+                            // kill the fade out
+                            self.transform_fade_out = None;
+
                             // check the pending transform
                             match transform {
                                 TransformType::Reset() => {
@@ -403,10 +426,10 @@ impl SliceSeq {
 
                                         // convert the div in samples
                                         let mut quant_samples = f.len() / num_bars as usize;
-                                        quant_samples /= *quant;
+                                        quant_samples /= quant;
 
                                         // apply repeat
-                                        self.do_quant_repeat(quant_samples, *slice_index);
+                                        self.do_quant_repeat(quant_samples, slice_index);
                                     }
                                 }
                             }
@@ -510,6 +533,7 @@ impl SlicerGen {
                 positions_mode: super::PositionsMode::QonsetMode(),
                 next_transform: None,
                 buffer_swap_fade: Default::default(),
+                transform_fade_out: None,
             },
         }
     }
@@ -620,15 +644,15 @@ impl SampleGenerator for SlicerGen {
                     // match if we have a repeat, capture needs to be immediate
                     match t {
                         // catch repeat to catch the current slice idx
-                        TransformType::QuantRepeat { quant, slice_index } => {
-                            self.slice_seq.next_transform = Some(TransformType::QuantRepeat{
+                        TransformType::QuantRepeat { quant, slice_index: _ } => {
+                            self.slice_seq.push_transform(Some(TransformType::QuantRepeat{
                                 quant,
                                 slice_index: self.slice_seq.curr_slice_idx
-                            });
+                            }));
                         },
                         // all pass trought
                         _ => {
-                            self.slice_seq.next_transform = Some(t);
+                            self.slice_seq.push_transform(Some(t));
                         },
                     }
 

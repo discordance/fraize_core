@@ -34,7 +34,7 @@ pub fn initialize_osc(
     let (out_cx_tx, out_cx_rx) = bounded::<ControlMessage>(1024);
 
     // initialise the OUT -> IN crossbeam bus
-    let (in_cx_tx, in_cx_rx) = bounded::<ControlMessage>(1024);
+    let (in_cx_tx, _in_cx_rx) = bounded::<ControlMessage>(1024);
 
     // init the osc thread
     let osc_thread = thread::spawn(move || {
@@ -248,7 +248,7 @@ fn handle_incoming_packet(
                 }
             };
         }
-        OscPacket::Bundle(bundle) => {
+        OscPacket::Bundle(_bundle) => {
             // println!("osc: OSC Bundle: {:?}", bundle);
         }
     }

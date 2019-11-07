@@ -64,11 +64,7 @@ impl BiquadFilter {
         slope: f32,
     ) -> BiquadFilter {
         //
-        let (mut A, mut w0, mut alpha, mut beta) = (0.0f32, 0.0, 0.0, 0.0);
-        let (mut a0, mut a1, mut a2, mut b0, mut b1, mut b2) = (0.0f32, 0.0, 0.0, 0.0, 0.0, 0.0);
-
-        //
-        A = match filter_type {
+        let big_a = match filter_type {
             FilterType::PeakingEQ() | FilterType::LowShelf() | FilterType::HiShelf() => {
                 f32::powf(10.0, db_gain / 40.0)
             }
@@ -76,14 +72,15 @@ impl BiquadFilter {
         };
 
         //
-        w0 = 2.0 * f32::consts::PI * f0 / fs;
+        let w0 = 2.0 * f32::consts::PI * f0 / fs;
 
         //
+        let alpha;
         match filter_opt {
             FilterOp::UseSlope() => match filter_type {
                 FilterType::LowShelf() | FilterType::HiShelf() => {
                     alpha =
-                        f32::sin(w0) / 2.0 * f32::sqrt((A + 1.0 / A) * (1.0 / slope - 1.0) + 2.0)
+                        f32::sin(w0) / 2.0 * f32::sqrt((big_a + 1.0 / big_a) * (1.0 / slope - 1.0) + 2.0)
                 }
                 _ => alpha = f32::sin(w0) / (2.0 * q),
             },
@@ -94,6 +91,8 @@ impl BiquadFilter {
         }
 
         // switch and calc
+        let beta;
+        let (a0, a1, a2, b0, b1, b2);
         match filter_type {
             FilterType::LowPass() => {
                 b0 = (1.0 - f32::cos(w0)) / 2.0;
@@ -144,30 +143,30 @@ impl BiquadFilter {
                 a2 = 1.0 - alpha;
             }
             FilterType::PeakingEQ() => {
-                b0 = 1.0 + alpha * A;
+                b0 = 1.0 + alpha * big_a;
                 b1 = -2.0 * f32::cos(w0);
-                b2 = 1.0 - alpha * A;
+                b2 = 1.0 - alpha * big_a;
                 a0 = 1.0 + alpha;
                 a1 = -2.0 * f32::cos(w0);
                 a2 = 1.0 - alpha;
             }
             FilterType::LowShelf() => {
-                beta = 2.0 * f32::sqrt(A) * alpha;
-                b0 = A * ((A + 1.0) - (A - 1.0) * f32::cos(w0) + beta);
-                b1 = 2.0 * A * ((A - 1.0) - (A + 1.0) * f32::cos(w0));
-                b2 = A * ((A + 1.0) - (A - 1.0) * f32::cos(w0) - beta);
-                a0 = (A + 1.0) + (A - 1.0) * f32::cos(w0) + beta;
-                a1 = -2.0 * ((A - 1.0) + (A + 1.0) * f32::cos(w0));
-                a2 = (A + 1.0) + (A - 1.0) * f32::cos(w0) - beta;
+                beta = 2.0 * f32::sqrt(big_a) * alpha;
+                b0 = big_a * ((big_a + 1.0) - (big_a - 1.0) * f32::cos(w0) + beta);
+                b1 = 2.0 * big_a * ((big_a - 1.0) - (big_a + 1.0) * f32::cos(w0));
+                b2 = big_a * ((big_a + 1.0) - (big_a - 1.0) * f32::cos(w0) - beta);
+                a0 = (big_a + 1.0) + (big_a - 1.0) * f32::cos(w0) + beta;
+                a1 = -2.0 * ((big_a - 1.0) + (big_a + 1.0) * f32::cos(w0));
+                a2 = (big_a + 1.0) + (big_a - 1.0) * f32::cos(w0) - beta;
             }
             FilterType::HiShelf() => {
-                beta = 2.0 * f32::sqrt(A) * alpha;
-                b0 = A * ((A + 1.0) + (A - 1.0) * f32::cos(w0) + beta);
-                b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * f32::cos(w0));
-                b2 = A * ((A + 1.0) + (A - 1.0) * f32::cos(w0) - beta);
-                a0 = (A + 1.0) - (A - 1.0) * f32::cos(w0) + beta;
-                a1 = 2.0 * ((A - 1.0) - (A + 1.0) * f32::cos(w0));
-                a2 = (A + 1.0) - (A - 1.0) * f32::cos(w0) - beta;
+                beta = 2.0 * f32::sqrt(big_a) * alpha;
+                b0 = big_a * ((big_a + 1.0) + (big_a - 1.0) * f32::cos(w0) + beta);
+                b1 = -2.0 * big_a * ((big_a - 1.0) + (big_a + 1.0) * f32::cos(w0));
+                b2 = big_a * ((big_a + 1.0) + (big_a - 1.0) * f32::cos(w0) - beta);
+                a0 = (big_a + 1.0) - (big_a - 1.0) * f32::cos(w0) + beta;
+                a1 = 2.0 * ((big_a - 1.0) - (big_a + 1.0) * f32::cos(w0));
+                a2 = (big_a + 1.0) - (big_a - 1.0) * f32::cos(w0) - beta;
             }
         }
 

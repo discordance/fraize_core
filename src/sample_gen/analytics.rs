@@ -90,7 +90,7 @@ pub fn detect_onsets(samples: &[f32]) -> Vec<usize> {
                     break;
                 }
                 onset.execute(&chunk);
-                let mut detected = onset.last_onset();
+                let detected = onset.last_onset();
 
                 if latest_detection < detected {
                     positions.push(detected as usize);

@@ -154,7 +154,7 @@ impl SampleGenerator for RePitchGen {
     }
 
     /// SampleGen impl specific control message
-    fn push_control_message(&mut self, message: ControlMessage) {
+    fn push_control_message(&mut self, _message: ControlMessage) {
         // do nothing for now
     }
 }
