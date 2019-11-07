@@ -226,8 +226,10 @@ struct SliceSeq {
     slices_orig: SliceMap,
     /// Transformed slices this hold the result of any transformation
     t_slices: SliceMap,
-    /// curently playing slice that will be consumed
+    /// currently playing slice that will be consumed
     current_slice: Slice,
+    /// keep current_slice index in memory for repeats
+    curr_slice_idx: usize,
     /// manage transforms
     next_transform: Option<TransformType>,
     /// useful to perform a micro fade when swaping buffers
@@ -348,6 +350,10 @@ impl SliceSeq {
                     Some(idx) => *idx,
                 };
 
+                // update the current slice index in the SliceSeq
+                // allow crazy snappy beat repeats
+                self.curr_slice_idx = curr_slice_idx;
+
                 // fetch current slice
                 let curr_slice = *self.t_slices.get(&curr_slice_idx).unwrap();
 
@@ -384,7 +390,7 @@ impl SliceSeq {
                                 }
                                 TransformType::QuantRepeat {
                                     quant,
-                                    slice_index: _,
+                                    slice_index,
                                 } => {
                                     // need a local buffer
                                     if let Some(f) = &self.local_frames {
@@ -399,7 +405,8 @@ impl SliceSeq {
                                         let mut quant_samples = f.len() / num_bars as usize;
                                         quant_samples /= *quant;
 
-                                        self.do_quant_repeat(quant_samples, curr_slice_idx);
+                                        // apply repeat
+                                        self.do_quant_repeat(quant_samples, *slice_index);
                                     }
                                 }
                             }
@@ -499,6 +506,7 @@ impl SlicerGen {
                 slices_orig: SliceMap::new(),
                 t_slices: SliceMap::new(),
                 current_slice: Default::default(),
+                curr_slice_idx: Default::default(),
                 positions_mode: super::PositionsMode::QonsetMode(),
                 next_transform: None,
                 buffer_swap_fade: Default::default(),
@@ -545,10 +553,6 @@ impl SampleGenerator for SlicerGen {
     fn load_buffer(&mut self, smartbuf: &SmartBuffer) {
         self.sample_gen.smartbuf.copy_from(smartbuf);
         self.slice_seq.safe_load_buffer(smartbuf);
-//        self.slice_seq.next_transform = Some(TransformType::QuantRepeat {
-//            quant: 4,
-//            slice_index: 0,
-//        });
     }
 
     /// Sync the slicer according to a clock
@@ -572,10 +576,6 @@ impl SampleGenerator for SlicerGen {
         }
 
         //        if self.sample_gen.is_beat_frame() {
-        //            self.slice_seq.next_transform = Some(TransformType::QuantRepeat {
-        //                quant: 4,
-        //                slice_index: 0,
-        //            });
         //        }
     }
 
@@ -617,7 +617,21 @@ impl SampleGenerator for SlicerGen {
                 message,
             } => match message {
                 SlicerMessage::Transform(t) => {
-                    self.slice_seq.next_transform = Some(t);
+                    // match if we have a repeat, capture needs to be immediate
+                    match t {
+                        // catch repeat to catch the current slice idx
+                        TransformType::QuantRepeat { quant, slice_index } => {
+                            self.slice_seq.next_transform = Some(TransformType::QuantRepeat{
+                                quant,
+                                slice_index: self.slice_seq.curr_slice_idx
+                            });
+                        },
+                        // all pass trought
+                        _ => {
+                            self.slice_seq.next_transform = Some(t);
+                        },
+                    }
+
                 }
             },
             _ => (), // ignore the rest
