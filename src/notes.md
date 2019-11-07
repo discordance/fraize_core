@@ -38,6 +38,10 @@ https://github.com/RustAudio/sample
 
 - https://github.com/MindBuffer?fbclid=IwAR3W2WNqQ3THNnbvYYSclDYY3VUo62LyB-1AEr_Oeg2xFndxOOQ-4JElD9A
 
+## compressor RUST
+
+https://github.com/MindBuffer/compressor
+
 ## reverbs RUST
 
 - https://github.com/mosmeh/accent

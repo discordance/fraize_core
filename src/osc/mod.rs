@@ -225,6 +225,23 @@ fn handle_incoming_packet(
                         }
                         _ => {}
                     }
+                },
+                "/smplr/track/slicer/repeat" => {
+                    let args = msg.args.unwrap();
+                    // nice way to handle args :D
+                    match (&args[0], &args[1]) {
+                        (OscType::Int(idx), OscType::Int(q)) => {
+                            let _res = command_tx.try_send(ControlMessage::Slicer {
+                                tcode: 0,
+                                track_num: *idx as usize,
+                                message: SlicerMessage::Transform(TransformType::QuantRepeat{
+                                    quant: *q as usize,
+                                    slice_index: 0 // unused here
+                                })
+                            });
+                        }
+                        _ => {}
+                    }
                 }
                 _ => {
                     println!("osc: unimplemented adress: {:?}", msg.addr);
