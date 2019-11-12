@@ -107,7 +107,6 @@ pub fn initialize_audio(
             }
         });
     });
-
     // return handle
     audio_thread
 }

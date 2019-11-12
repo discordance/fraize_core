@@ -10,6 +10,8 @@ use self::time_calc::{Samples, Ticks, TimeSig};
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use control::{ControlMessage, SlicerMessage};
 use std::collections::HashMap;
+use std::f64;
+
 //
 //use std::alloc::System;
 //#[global_allocator]
@@ -19,7 +21,7 @@ use std::collections::HashMap;
 const SLICE_FADE_IN: usize = 64;
 const SLICE_FADE_OUT: usize = 1024 * 2;
 const SLICER_MICRO_FADE: usize = 128;
-const SLICER_T_FADE_OUT: usize = 128;
+const SLICER_T_FADE_OUT: usize = 64;
 
 /// A Slice struct, represnte a slice of audio in the buffer
 /// Doesn't store any audio data, but start and end index
@@ -34,12 +36,14 @@ struct Slice {
     end: usize,
     /// cursor is the current position in the slice
     cursor: usize,
+    // reverse
+//    reverse: bool,
 }
 
 impl Slice {
     /// get the next frame at cursor
     /// if the cursor is consumed, return the zero frame
-    fn next_frame(&mut self, _playback_rate: f64, frames: &[Stereo<f32>]) -> Stereo<f32> {
+    fn next_frame(&mut self, playback_rate: f64, frames: &[Stereo<f32>]) -> Stereo<f32> {
         // init with default
         let mut next_frame = Stereo::<f32>::equilibrium();
 
@@ -62,7 +66,17 @@ impl Slice {
             }
         }
 
-        // return but avoiding clicks
+        // ajust len
+        let new_len = match playback_rate {
+            1.0..=f64::INFINITY => {
+                (self.len() as f64 / playback_rate) as i64
+            }
+            _ => {
+                self.len() as i64
+            }
+        };
+
+        // return enveloped
         next_frame
             .scale_amp(super::gen_utils::fade_in(
                 self.cursor as i64,
@@ -71,7 +85,7 @@ impl Slice {
             .scale_amp(super::gen_utils::fade_out(
                 self.cursor as i64,
                 SLICE_FADE_OUT as i64, // @TODO this should be param
-                self.len() as i64,
+                new_len, // adjust from playback rate
             ))
             .scale_amp(1.45)
     }
@@ -81,10 +95,13 @@ impl Slice {
         self.cursor == self.len()
     }
 
-//    /// how many left
-//    fn remaining(&self) -> usize {
-//        return self.len() - self.cursor;
-//    }
+    /// how many left
+    fn remaining(&self) -> usize {
+        if !self.is_consumed() {
+            return self.len() - self.cursor;
+        }
+        0
+    }
 
     /// get slice len
     fn len(&self) -> usize {
@@ -97,8 +114,8 @@ impl Slice {
 pub enum TransformType {
     /// Reset slices to original order
     Reset(),
-    /// Shuffle all the slices randomly
-    Shuffle(),
+    /// Swaps all the slices randomly
+    RandSwap(),
     /// Repeat a given Slice on index according to a defined quantization in bar div
     QuantRepeat {
         // our length relative to bar div
@@ -111,6 +128,7 @@ pub enum TransformType {
 /// a SliceMap is useful encapsulation to perform transform on slice with hashmap and sorted keys index
 /// maybe not very efficient but at least pre-allocated
 /// no support for remove as we trash all everytime
+/// @TODO add a shuffle on postions
 #[derive(Debug, Clone)]
 struct SliceMap {
     /// Hashmap of all slices, unordered by the datastruct
@@ -168,9 +186,9 @@ impl SliceMap {
         assert_eq!(self.unord_slices.len(), self.ord_keys.len());
     }
 
-    // shuffle the slices while keeping the keys order
-    // needs to be passed the old slicemap as we are manipulating this one
-    fn shuffle(&mut self, old_map: &Self) {
+    // randomly swap the slices while keeping the keys order
+    // needs to be passed the previous slicemap as we are manipulating this one
+    fn rand_swap(&mut self, prev_map: &Self) {
         // will use mangle_keys, need to resize just in case
         self.mangle_keys.resize(self.ord_keys.len(), 0);
         self.mangle_keys.copy_from_slice(&self.ord_keys[..]);
@@ -181,7 +199,7 @@ impl SliceMap {
         // swap pairwise
         for (idx, slice_index) in self.mangle_keys.iter_mut().enumerate() {
             // get slice from older
-            let new = *old_map.get(&slice_index).unwrap(); // should not fail
+            let new = *prev_map.get(&slice_index).unwrap(); // should not fail
 
             // get the slice in mutable
             let old_slice = self.unord_slices.get_mut(&self.ord_keys[idx]).unwrap(); // should not fail;
@@ -216,24 +234,23 @@ impl SliceMap {
 /// By default the keys are given by the buffer onset positions, depending the mode
 #[derive(Debug, Clone)]
 struct SliceSeq {
-    /// Holds a local copy of the gen frame buffer, so it can change without clicks
-    local_frames: Option<Vec<Stereo<f32>>>,
-    /// Original tempo is useful for some transforms
-    orig_tempo: f64,
+    /// Holds a local copy of the gen smart buffer, so it can change without clicks
+    local_sbuffer: Option<SmartBuffer>,
     /// Positions mode define which kind of positions to use in the slicer
     positions_mode: super::PositionsMode,
-    /// Slices ordered according to the keys, in orginal order
+    /// Slices in orginal sample gen buffer order
     slices_orig: SliceMap,
-    /// Transformed slices this hold the result of any transformation
-    t_slices: SliceMap,
-    /// currently playing slice that will be consumed
-    current_slice: Slice,
-    /// keep current_slice index in memory for repeats
-    curr_slice_idx: usize,
+    /// Temp Slices used for applying transforms
+    slices_temp: SliceMap,
+    /// Currently playing Slices
+    slices_playing: SliceMap,
+    /// Currently playing Slice that will be consumed
+    /// Conveniently stores the index also
+    curr_slice: (usize, Slice),
     /// manage transforms
     next_transform: Option<TransformType>,
-    /// useful to perform a micro fade out/in when swaping buffers
-    buffer_swap_fade: super::gen_utils::MicroFadeOutIn,
+    // useful to perform a micro fade out/in when swaping buffers
+//    buffer_swap_fade: super::gen_utils::MicroFadeOutIn,
     /// useful to perform a micro fade out when transform will be applied
     transform_fade_out: Option<super::gen_utils::MicroFadeOut>
 }
@@ -252,7 +269,7 @@ impl SliceSeq {
     /// Safely notice that we need to swap the local frame buffer with the new one
     /// Takes immediate action if the local buffer is empty
     fn safe_load_buffer(&mut self, buffer: &SmartBuffer) {
-        match self.local_frames {
+        match self.local_sbuffer {
             // we don't have a local buffer yet, so we init (will alloc memory)
             None => {
                 self.do_load_buffer(buffer);
@@ -260,7 +277,7 @@ impl SliceSeq {
             // postpone to the next slice
             Some(_) => {
                 // init the micro fade
-                self.buffer_swap_fade.start(SLICER_MICRO_FADE);
+//                self.buffer_swap_fade.start(SLICER_MICRO_FADE);
             }
         }
     }
@@ -269,22 +286,15 @@ impl SliceSeq {
     /// can generate clicks!
     fn do_load_buffer(&mut self, buffer: &SmartBuffer) {
         // check if we have a
-        match &mut self.local_frames {
+        match &mut self.local_sbuffer {
             None => {
                 // clone only one time !
-                self.local_frames = Some(buffer.frames.clone());
+                self.local_sbuffer = Some(buffer.clone());
             }
             Some(local) => {
-                // does not allocate CHECKED
-                // extends if needed
-                local.resize(buffer.frames.len(), Stereo::<f32>::equilibrium());
-                // copy frames of the buffer in the local buffer
-                local.copy_from_slice(&buffer.frames[..]);
+                local.copy_from(buffer);
             }
         }
-
-        // sets the original tempo
-        self.orig_tempo = buffer.original_tempo;
 
         // get positions
         let positions = &buffer.positions[&self.positions_mode];
@@ -305,13 +315,55 @@ impl SliceSeq {
         }
 
         //
-        self.t_slices.copy_from(&self.slices_orig);
+        self.slices_playing.copy_from(&self.slices_orig);
 
         // init the first slice
-        self.current_slice = *self.slices_orig.get(&0).unwrap();
+        self.curr_slice = (0, *self.slices_orig.get(&0).unwrap());
     }
 
-    /// get next frame according to the given frame index at seq level
+    /// Updates the state of slices
+    /// Applying transforms
+    /// Switching to the next slice
+    /// Changing buffer
+    fn update(&mut self, clock_frames: u64, gen_buffer: &SmartBuffer) {
+        // we need the local buffer initialized
+        match &self.local_sbuffer {
+            Some(lb) => {
+                // @TODO take care of buffer shit
+
+                // @TODO take care of transform shit
+
+                // @TODO sets the fucking curr slice and next slice
+
+                // gives an ordered list of the currently playing slices indexes
+                let indexes = self.slices_playing.ord_keys();
+
+                // find the first slice index in sample that is just above the clock_frames
+                // it gives us which slice should play according to the clock
+                let curr_slice_idx = indexes
+                    .iter() // get all idx iter
+                    .rev() // start form the end (reverse)
+                    // might not find if we are in the last slice
+                    .find(|s| **s <= (clock_frames as usize) % lb.frames.len())
+                    // return the last slice index if we are not there
+                    .unwrap_or(self.slices_playing.ord_keys().last().unwrap());
+
+                // fetch current slice
+                // cannot fail
+                let curr_slice = *self.slices_playing.get(&curr_slice_idx).unwrap();
+
+                // check if clock given current slice is the same as the playing current slice
+                // if not, we should set the self.curren_slice
+                if self.curr_slice.0 != *curr_slice_idx {
+                    self.curr_slice = (*curr_slice_idx, curr_slice);
+                }
+            }
+            None => {} // nothing to update
+        }
+    }
+
+
+    /// get next frame according to the given clock frames index and the stae of slices.
     /// it uses playback_speed to adjust the slice envelope
     /// get the ref of the sample generator frames, and use a local copy
     /// @TODO needs to apply a short fadeout when queue a transform, still have clicks sometimes
@@ -322,154 +374,167 @@ impl SliceSeq {
         clock_frames: u64, // those ticks are not wrapped
         gen_buffer: &SmartBuffer,
     ) -> Stereo<f32> {
+        // !! update first !!
+        self.update(clock_frames, gen_buffer);
+
         // check if we have a local buffer
-        match &self.local_frames {
+        match &self.local_sbuffer {
             // nope so we send back silence
             None => return Stereo::<f32>::equilibrium(),
-            // yes ! slice it!
+            // grab the next frame
             Some(local_frames) => {
-                // always check and advance the buffer_swap_fade
-                if self.buffer_swap_fade.next_and_check() {
-                    // we need to swap the buffer
-                    // copy the gen buffer into the local buffer
-                    self.do_load_buffer(gen_buffer);
-
-                    // and we return here empty here
-                    return Stereo::<f32>::equilibrium();
-                }
-
-                // grab the next frame
-                let mut next_frame = self
-                    .current_slice
-                    .next_frame(playback_rate, &local_frames[..]);
-
-                // apply microfrade if any for the buffer swap
-                next_frame = self.buffer_swap_fade.fade_frame(next_frame);
-
-                // check if there is a pending transform fade out and apply if its the case
-                if let Some(fo) = self.transform_fade_out.as_mut() {
-                    fo.next_and_check();
-                    next_frame = fo.fade_frame(next_frame);
-                }
-
-                // perform the next slice computation
-                // give a nice ordered list of start slices
-                let kz = self.t_slices.ord_keys();
-
-                // elegant and ugly at the same time
-                // find the first slice index in sample that is just above the frame_index
-                let curr_slice_idx = kz
-                    .iter()
-                    .rev()
-                    .find(|s| **s <= (clock_frames as usize) % local_frames.len());
-
-                // check the curr_slice_idx, if none, it is the last
-                let curr_slice_idx = match curr_slice_idx {
-                    None => (*self.t_slices.ord_keys().last().unwrap()),
-                    Some(idx) => *idx,
-                };
-
-                // update the current slice index in the SliceSeq
-                // allow crazy snappy beat repeats
-                self.curr_slice_idx = curr_slice_idx;
-
-                // fetch current slice
-                let curr_slice = *self.t_slices.get(&curr_slice_idx).unwrap();
-
-                // get the next slice idx
-                let next_slice_idx = kz.iter().find(|s| **s > curr_slice_idx);
-
-                // need to look ahead of time to fix glitches in shuffling non equal len slices
-                let next_slice_idx = match next_slice_idx {
-                    None => 0,
-                    Some(nidx) => *nidx,
-                };
-
-                // current slice is not the one that should be, time to switch !
-                // be careful when applying transforms to slice, new IDS have to be provided
-                // or it will get stuck. 10.0.17763.0
-                if self.current_slice.id != curr_slice.id {
-                    // NEW SLICE !
-                    // apply transforms at new slice is better
-                    let next_t = self.next_transform;
-                    match next_t {
-                        None => {
-                            // no transform
-                            // actual switch
-                            self.current_slice = curr_slice;
-                        }
-                        Some(transform) => {
-                            // kill the fade out
-                            self.transform_fade_out = None;
-
-                            // check the pending transform
-                            match transform {
-                                TransformType::Reset() => {
-                                    self.do_reset();
-                                }
-                                TransformType::Shuffle() => {
-                                    // apply shuffle
-                                    self.do_shuffle();
-                                }
-                                TransformType::QuantRepeat {
-                                    quant,
-                                    slice_index,
-                                } => {
-                                    // need a local buffer
-                                    if let Some(f) = &self.local_frames {
-                                        // how many bars we have
-                                        let num_bars = Samples(f.len() as i64).bars(
-                                            self.orig_tempo,
-                                            TimeSig { top: 4, bottom: 4 },
-                                            44_100.0,
-                                        );
-
-                                        // convert the div in samples
-                                        let mut quant_samples = f.len() / num_bars as usize;
-                                        quant_samples /= quant;
-
-                                        // apply repeat
-                                        self.do_quant_repeat(quant_samples, slice_index);
-                                    }
-                                }
-                            }
-                            // go back to 1
-                            // maybe no good
-                            self.current_slice = *self.t_slices.get(&0).unwrap();
-                            self.next_transform = None;
-                        }
-                    }
-
-                    // needs end of slice error fix
-                    let mut adjusted_len = self.current_slice.len();
-
-                    // fix for shuffle and mismatching length
-                    if curr_slice_idx < next_slice_idx {
-                        let real_len = next_slice_idx - curr_slice_idx;
-                        if adjusted_len > real_len {
-                            adjusted_len = real_len
-                        }
-                    } else {
-                        // if the last slice len is greater than the buffer end, we cut
-                        if curr_slice.start + curr_slice.len()
-                            > self.local_frames.as_ref().unwrap().len()
-                        {
-                            adjusted_len =
-                                self.local_frames.as_ref().unwrap().len() - curr_slice_idx;
-                            // local_frames could not be empty at this stage
-                        }
-                    }
-
-                    // fix for faster playback rate
-                    if playback_rate > 1.0 {
-                        adjusted_len = (adjusted_len as f64 / playback_rate) as usize;
-                    }
-
-                    // apply new length
-                    self.current_slice.end = self.current_slice.start + adjusted_len;
-                };
-
-                return next_frame;
+                return self
+                    .curr_slice.1
+                    .next_frame(playback_rate, &local_frames.frames[..]);
+//                // always check and advance the buffer_swap_fade
+//                if self.buffer_swap_fade.next_and_check() {
+//                    // we need to swap the buffer
+//                    // copy the gen buffer into the local buffer
+//                    self.do_load_buffer(gen_buffer);
+//
+//                    // and we return here empty here
+//                    return Stereo::<f32>::equilibrium();
+//                }
+//
+//                // grab the next frame
+//                let mut next_frame = self
+//                    .current_slice
+//                    .next_frame(playback_rate, &local_frames[..]);
+//
+//                // apply microfrade if any for the buffer swap
+//                next_frame = self.buffer_swap_fade.fade_frame(next_frame);
+//
+//                // check if there is a pending transform fade out and apply if its the case
+//                if let Some(fo) = self.transform_fade_out.as_mut() {
+//                    fo.next_and_check();
+//                    next_frame = fo.fade_frame(next_frame);
+//                }
+//
+//                // perform the next slice computation
+//                // give a nice ordered list of start slices
+//                let kz = self.t_slices.ord_keys();
+//
+//                // elegant and ugly at the same time
+//                // find the first slice index in sample that is just above the frame_index
+//                let curr_slice_idx = kz
+//                    .iter()
+//                    .rev()
+//                    .find(|s| **s <= (clock_frames as usize) % local_frames.len());
+//
+//                // check the curr_slice_idx, if none, it is the last
+//                let curr_slice_idx = match curr_slice_idx {
+//                    None => (*self.t_slices.ord_keys().last().unwrap()),
+//                    Some(idx) => *idx,
+//                };
+//
+//                // update the current slice index in the SliceSeq
+//                // allow crazy snappy beat repeats
+//                self.curr_slice_idx = curr_slice_idx;
+//
+//                // fetch current slice
+//                let curr_slice = *self.t_slices.get(&curr_slice_idx).unwrap();
+//
+//                // get the next slice idx
+//                let next_slice_idx = kz.iter().find(|s| **s > curr_slice_idx);
+//
+//                // need to look ahead of time to fix glitches in shuffling non equal len slices
+//                let next_slice_idx = match next_slice_idx {
+//                    None => 0,
+//                    Some(nidx) => *nidx,
+//                };
+//
+//                // current slice is not the one that should be, time to switch !
+//                // be careful when applying transforms to slice, new IDS have to be provided
+//                // or it will get stuck. 10.0.17763.0
+//                // @TODO NEED TO WAY THE DIV AFTER FOR APPLYING TRANSFORM
+//                // @NOT THE NEXT SLICE
+//                if self.current_slice.id != curr_slice.id {
+//
+//                    // NEW SLICE !
+//                    // apply transforms at new slice is better
+//                    let next_t = self.next_transform;
+//                    match next_t {
+//                        None => {
+//                            // no transform
+//                            // actual switch
+//                            self.current_slice = curr_slice;
+//                        }
+//                        Some(transform) => {
+//                            println!("current slice rest {} last frame {:?}",
+//                                     self.current_slice.remaining(),
+//                                     next_frame);
+//
+//                            // kill the fade out
+//                            self.transform_fade_out = None;
+//
+//                            // check the pending transform
+//                            match transform {
+//                                TransformType::Reset() => {
+//                                    self.do_reset();
+//                                }
+//                                TransformType::RandSwap() => {
+//                                    // apply shuffle
+//                                    self.do_rand_swap();
+//                                }
+//                                TransformType::QuantRepeat {
+//                                    quant,
+//                                    slice_index,
+//                                } => {
+//                                    // need a local buffer
+//                                    if let Some(f) = &self.local_frames {
+//                                        // how many bars we have
+//                                        let num_bars = Samples(f.len() as i64).bars(
+//                                            self.orig_tempo,
+//                                            TimeSig { top: 4, bottom: 4 },
+//                                            44_100.0,
+//                                        );
+//
+//                                        // convert the div in samples
+//                                        let mut quant_samples = f.len() / num_bars as usize;
+//                                        quant_samples /= quant;
+//
+//                                        // apply repeat
+//                                        self.do_quant_repeat(quant_samples, slice_index);
+//                                    }
+//                                }
+//                            }
+//                            // go back to 1
+//                            // maybe no good
+//                            self.current_slice = *self.t_slices.get(&0).unwrap();
+//                            self.next_transform = None;
+//                        }
+//                    }
+//
+//                    // needs end of slice error fix
+//                    let mut adjusted_len = self.current_slice.len();
+//
+//                    // fix for shuffle and mismatching length
+//                    if curr_slice_idx < next_slice_idx {
+//                        let real_len = next_slice_idx - curr_slice_idx;
+//                        if adjusted_len > real_len {
+//                            adjusted_len = real_len
+//                        }
+//                    } else {
+//                        // if the last slice len is greater than the buffer end, we cut
+//                        if curr_slice.start + curr_slice.len()
+//                            > self.local_frames.as_ref().unwrap().len()
+//                        {
+//                            adjusted_len =
+//                                self.local_frames.as_ref().unwrap().len() - curr_slice_idx;
+//                            // local_frames could not be empty at this stage
+//                        }
+//                    }
+//
+//                    // fix for faster playback rate
+//                    if playback_rate > 1.0 {
+//                        adjusted_len = (adjusted_len as f64 / playback_rate) as usize;
+//                    }
+//
+//                    // apply new length
+//                    self.current_slice.end = self.current_slice.start + adjusted_len;
+//                };
+//
+//                return next_frame;
             }
         }
     }
@@ -478,21 +543,21 @@ impl SliceSeq {
 
     /// reset the slices !
     fn do_reset(&mut self) {
-        self.t_slices.copy_from(&self.slices_orig);
+        self.slices_playing.copy_from(&self.slices_orig);
     }
 
-    /// Shuffles the slices ! Can introduce clicks if done in the middle
+    /// Rand swaps the slices ! Can introduce clicks if done in the middle
     /// safe_shuffle should be used instead
-    fn do_shuffle(&mut self) {
+    fn do_rand_swap(&mut self) {
         // shuffle the keys
-        self.t_slices.shuffle(&self.slices_orig);
+        self.slices_playing.rand_swap(&self.slices_orig);
     }
 
     /// Repeat a slice accoding to a quantization in samples
     fn do_quant_repeat(&mut self, quant_samples: usize, slice_idx: usize) {
-        if let Some(f) = &self.local_frames {
-            self.t_slices
-                .quant_repeat(quant_samples, slice_idx, f.len());
+        if let Some(f) = &self.local_sbuffer {
+            self.slices_playing
+                .quant_repeat(quant_samples, slice_idx, f.frames.len());
         }
     }
 }
@@ -524,15 +589,14 @@ impl SlicerGen {
                 sync_next_frame_index: 0,
             },
             slice_seq: SliceSeq {
-                local_frames: None, // one sec
-                orig_tempo: 120.0,
+                local_sbuffer: None, // one sec
                 slices_orig: SliceMap::new(),
-                t_slices: SliceMap::new(),
-                current_slice: Default::default(),
-                curr_slice_idx: Default::default(),
-                positions_mode: super::PositionsMode::QonsetMode(),
+                slices_temp: SliceMap::new(),
+                slices_playing: SliceMap::new(),
+                curr_slice: Default::default(),
+                positions_mode: super::PositionsMode::OnsetMode(),
                 next_transform: None,
-                buffer_swap_fade: Default::default(),
+//                buffer_swap_fade: Default::default(),
                 transform_fade_out: None,
             },
         }
@@ -647,7 +711,7 @@ impl SampleGenerator for SlicerGen {
                         TransformType::QuantRepeat { quant, slice_index: _ } => {
                             self.slice_seq.push_transform(Some(TransformType::QuantRepeat{
                                 quant,
-                                slice_index: self.slice_seq.curr_slice_idx
+                                slice_index: self.slice_seq.curr_slice.0 // gives the index
                             }));
                         },
                         // all pass trought

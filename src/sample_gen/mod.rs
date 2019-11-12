@@ -171,6 +171,7 @@ impl SmartBuffer {
         // sometime we can't calculate onsets
         if onset_positions.len() > 2 {
             // quantize onset for the quantized mode
+            // @TODO could be parametrized
             let quantized =
                 analytics::quantize_pos(&onset_positions, self.frames.len() / (16 * beats));
 

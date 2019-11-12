@@ -213,11 +213,11 @@ fn handle_incoming_packet(
                                         message: SlicerMessage::Transform(TransformType::Reset())
                                     });
                                 }
-                                "shuffle" => {
+                                "rand_swap" => {
                                     let _res = command_tx.try_send(ControlMessage::Slicer {
                                         tcode: 0,
                                         track_num: *idx as usize,
-                                        message: SlicerMessage::Transform(TransformType::Shuffle())
+                                        message: SlicerMessage::Transform(TransformType::RandSwap())
                                     });
                                 }
                                 _ => {}, // unknown
