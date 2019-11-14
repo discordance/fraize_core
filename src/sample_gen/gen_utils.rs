@@ -26,7 +26,7 @@ pub fn fade_out(t: i64, len: i64, end: i64) -> f32 {
     return 1.0;
 }
 /// Helper to exec microfades out
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct MicroFadeOut {
     /// the ramp t in samples
     cursor: usize,
@@ -37,12 +37,21 @@ pub struct MicroFadeOut {
 impl MicroFadeOut {
     /// set the micro fade at the start
     pub fn start(&mut self, duration: usize) {
-        // needed
-        assert_eq!(duration % 2, 0);
-
         // duration must be a multiple of 2
         self.cursor = 0;
         self.duration = duration;
+    }
+
+    pub fn get_cursor(&self) -> usize {
+        return self.cursor
+    }
+
+    pub fn get_dur(&self) -> usize {
+        return self.duration
+    }
+
+    pub fn is_over(&self) -> bool {
+        self.cursor >= self.duration
     }
 
     /// advance the state of the fade and check if we are in the middle (zero crossing) position
@@ -74,7 +83,7 @@ impl MicroFadeOut {
 }
 
 /// Helper to exec microfades out->in
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct MicroFadeOutIn {
     /// the ramp t in samples
     cursor: usize,

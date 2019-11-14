@@ -212,6 +212,8 @@ impl AudioMixer {
             track.fill_next_block(buff_size);
         }
 
+//        let mut lf = Stereo::<f32>::equilibrium();
+
         // MIX!
         for (i, frame_out) in block_out.iter_mut().enumerate() {
             // 64 bit mixer
@@ -234,6 +236,12 @@ impl AudioMixer {
             // write
             frame_out[0] = acc[0] as f32;
             frame_out[1] = acc[1] as f32;
+
+//            if f32::abs(lf[0] - frame_out[0]) >= 0.8 {
+//                println!("disc");
+//            }
+
+//            lf = Stereo::<f32>::from([frame_out[0], frame_out[1]]);
         }
     }
 

@@ -118,6 +118,7 @@ impl SmartBuffer {
 
     /// Loads and analyse a wave file
     pub fn load_wave(&mut self, path: &str) -> Result<bool, &str> {
+        println!("load {}", path);
         // load some audio
         let reader = match WavReader::open(path) {
             Ok(r) => r,
@@ -129,6 +130,7 @@ impl SmartBuffer {
 
         // samples preparation
         // @TODO must check better the wave formats
+        // @TODO 24bit fails in silence
         let mut samples: Vec<f32> = reader
             .into_samples::<i16>()
             .filter_map(Result::ok)
@@ -153,7 +155,7 @@ impl SmartBuffer {
     fn analyse(&mut self, samples: &[f32], path: &str) {
         // parse tempo from filename
         let (orig_tempo, beats) = analytics::get_original_tempo(path, samples.len());
-        self.original_tempo = orig_tempo;
+        self.original_tempo = orig_tempo.floor();
         self.num_beats = beats;
 
         // detect tempo via aubio
