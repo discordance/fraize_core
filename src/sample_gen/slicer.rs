@@ -426,7 +426,7 @@ impl SliceSeq {
         // check if clock given current slice is the same as the playing current slice
         // if not, we should set the self.curren_slice
         if self.curr_slice.0 != curr_slice_idx {
-            // NEW SLICE
+            // NEW SLICE HERE
             // this is probably the time to check for transforms
             if let Some(nt) = self.next_transform {
                 match nt {
