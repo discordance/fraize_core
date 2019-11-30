@@ -41,8 +41,8 @@ pub const PPQN: Ppqn = 24;
 /// how many sample to fade in / out to avoid clicks when resync audio
 const NOCLICK_FADE_LENGTH: u64 = 64;
 
-/// SliceMode defines how the slices are cut in a smart buffer.
-/// Can be OnsetDetection or fixed BAR divisions.
+/// PositionsMode defines how the slices are cut in a smart buffer.
+/// Can be Onset Detection or fixed BAR divisions.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PositionsMode {
     /// Natural detected onsets.

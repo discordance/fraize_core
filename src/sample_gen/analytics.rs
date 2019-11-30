@@ -140,7 +140,6 @@ pub fn detect_bpm(samples: &[f32]) -> f64 {
 
 /// Basic division onsets position.
 pub fn slice_onsets(len: usize, divisor: usize) -> Vec<usize> {
-    println!("{} {}", len, divisor);
     let step = len / divisor;
     let mut positions = Vec::new();
     for x in 0..divisor {
