@@ -770,7 +770,6 @@ dependencies = [
  "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "time_calc 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "trallocator 0.1.0",
  "wmidi 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -857,10 +856,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "serde 1.0.90 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
-
-[[package]]
-name = "trallocator"
-version = "0.1.0"
 
 [[package]]
 name = "ucd-util"
