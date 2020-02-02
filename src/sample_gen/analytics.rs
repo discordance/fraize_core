@@ -42,20 +42,18 @@ fn parse_filepath_beats(path: &str) -> Result<usize, &str> {
 /// Get the original tempo based on the beat value written in the filename, or analized with Aubio if not present.
 /// Returns original tempo as computed from file name and the number of beats
 /// @TODO take care of the the aubio part
-pub fn get_original_tempo(path: &str, num_samples: usize) -> (f64, usize) {
+pub fn get_original_tempo(path: &str, num_samples: usize) -> Option<(f64, usize)> {
     // compute number of beats
     let num_beats = match parse_filepath_beats(path) {
         Ok(n) => n,
         Err(err) => {
-            println!("Can't parse beats on the filename {}", err);
-            // default to 4 (one bar)
-            4
+            return None
         }
     };
     let ms = Samples((num_samples as i64) / 2).to_ms(44_100.0);
 
     let secs = ms.to_f64().unwrap() / 1000.0;
-    return (60.0 / (secs / num_beats as f64), num_beats);
+    return Some((60.0 / (secs / num_beats as f64), num_beats));
 }
 
 /// Onset detector via Aubio.
@@ -112,30 +110,26 @@ pub fn detect_onsets(samples: &[f32]) -> Vec<usize> {
 pub fn detect_bpm(samples: &[f32]) -> f64 {
     // mono version
     let mono: Vec<f32> = samples.iter().step_by(2).map(|x| *x).collect();
-    let mut chunk_iter = mono.chunks(HOP_SIZE); // by chunk
-    let mut tempo = Tempo::new(WIND_SIZE, HOP_SIZE, SR).expect("Tempo::new");
-    let mut detected_tempo = 120.0;
+    let mut chunk_iter = mono.chunks(HOP_SIZE/4); // by chunk
+    let mut tempo = Tempo::new(WIND_SIZE/4, HOP_SIZE/4, SR).expect("Tempo::new");
+    // let mut detected_tempo = 120.0;
 
     loop {
         let next = chunk_iter.next();
         match next {
             Some(chunk) => {
                 // break the fft
-                if chunk.len() != HOP_SIZE {
+                if chunk.len() != HOP_SIZE/4 {
                     break;
                 }
                 tempo.execute(&chunk);
-                match tempo.bpm() {
-                    Some(tempo) => detected_tempo = tempo,
-                    None => (),
-                }
             }
             None => break,
         }
     }
 
     // return
-    detected_tempo as f64
+    tempo.bpm().unwrap().floor() as f64
 }
 
 /// Basic division onsets position.

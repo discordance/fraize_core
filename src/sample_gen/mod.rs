@@ -26,7 +26,7 @@ pub mod slicer;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
-use self::time_calc::{Beats, Ppqn};
+use self::time_calc::{Samples, Beats, Ppqn};
 use control::ControlMessage;
 use std::collections::HashMap;
 
@@ -144,6 +144,7 @@ impl SmartBuffer {
         self.frames = frames.to_vec();
 
         // analyse
+        // println!("{}", path);
         self.analyse(&samples[..], path);
 
         Ok(true)
@@ -151,19 +152,26 @@ impl SmartBuffer {
 
     /// perform various sample analysis
     fn analyse(&mut self, samples: &[f32], path: &str) {
-        // parse tempo from filename
-        let (orig_tempo, beats) = analytics::get_original_tempo(path, samples.len());
-        self.original_tempo = orig_tempo;
-        self.num_beats = beats;
-
-        // detect tempo via aubio
-        // @TODO use it properly
-        let _detected_tempo = analytics::detect_bpm(&samples[..]);
+        // parse tempo from filename if possible
+        match analytics::get_original_tempo(path, samples.len()) {
+            Some((orig_tempo, beats)) => {
+                self.original_tempo = orig_tempo;
+                self.num_beats = beats;
+                // println!("tempo {}, beats: {}", self.original_tempo, self.num_beats);
+            }
+            None => {
+                // detect from aubio
+                self.original_tempo = analytics::detect_bpm(&samples[..]);
+                let beats = Samples(samples.len() as i64 / 2).beats(self.original_tempo, 44_100.0);
+                self.num_beats = beats as usize;
+                println!("tempo {}, beats: {}", self.original_tempo, self.num_beats);
+            }
+        }
 
         // compute onset positions
         let onset_positions = analytics::detect_onsets(&samples[..]);
 
-        self.set_postions(samples, beats, onset_positions);
+        self.set_postions(samples, self.num_beats, onset_positions);
     }
 
     /// setup positions for the smart buffer
