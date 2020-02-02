@@ -155,7 +155,7 @@ impl SmartBuffer {
     /// perform various sample analysis
     fn analyse(&mut self, samples: &[f32], path: &str) {
         // parse tempo from filename if possible
-        match analytics::get_original_tempo(path, samples.len()) {
+        match analytics::read_original_tempo(path, samples.len()) {
             Some((orig_tempo, beats)) => {
                 self.original_tempo = orig_tempo;
                 self.num_beats = beats;
@@ -172,6 +172,8 @@ impl SmartBuffer {
 
         // compute onset positions
         let onset_positions = analytics::detect_onsets(&samples[..]);
+
+        println!("onset_positions {}", onset_positions.len());
 
         self.set_postions(samples, self.num_beats, onset_positions);
     }

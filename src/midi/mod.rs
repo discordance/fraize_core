@@ -184,6 +184,7 @@ fn midi_cb(
                 }
                 // clock start
                 MidiMessage::Start => {
+                    println!("st");
                     midi_time.restart();
                     let message = SyncMessage::Start();
                     cx_tx.try_send(::control::ControlMessage::Playback(PlaybackMessage {

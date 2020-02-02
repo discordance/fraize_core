@@ -13,11 +13,6 @@ use sample_gen::gen_utils::MicroFadeOut;
 use std::collections::HashMap;
 use std::f64;
 
-//
-//use std::alloc::System;
-//#[global_allocator]
-//static GLOBAL: trallocator::Trallocator<System> = trallocator::Trallocator::new(System);
-
 /// Used to define slicer fadeins fadeouts in samples
 const SLICE_FADE_IN: usize = 64;
 const SLICE_FADE_OUT: usize = 256;
@@ -96,7 +91,9 @@ impl Slice {
     /// get the slice of the remaining frames
     fn fill_remaining(&self, frames: &[Stereo<f32>], fill: &mut Vec<Stereo<f32>>) {
         if !self.is_consumed() {
-            let f = &frames[self.start + self.cursor..self.end];
+            let f = &frames
+                .get(self.start + self.cursor..self.end)
+                .expect("no overflow");
             fill.resize(f.len(), Stereo::<f32>::equilibrium());
             fill.copy_from_slice(f);
             return;
@@ -353,7 +350,7 @@ impl SliceSeq {
 
                 // get the next slice index to estimate the length of the fade out
                 // current slice idx in the next buffer
-                let mut next_slice_idx = next_buff_positions
+                let next_slice_idx = next_buff_positions
                     .iter()
                     .find(|x| **x > *curr_slice_idx)
                     .unwrap_or(&0);
@@ -383,18 +380,21 @@ impl SliceSeq {
         }
 
         // get positions
-        let positions = &buffer.positions[&self.positions_mode];
+        let positions = &buffer
+            .positions
+            .get(&self.positions_mode)
+            .expect("position mode exists");
 
         self.slices_orig.clear();
 
         // iterate and set
         for (idx, pos) in positions.windows(2).enumerate() {
             self.slices_orig.insert(
-                pos[0],
+                *pos.first().expect("have a first pos"),
                 Slice {
                     id: idx,
-                    start: pos[0],
-                    end: pos[1], // can't fail
+                    start: *pos.first().expect("have a first pos"),
+                    end: *pos.last().expect("have a last pos"), // can't fail
                     cursor: 0,
                     reverse: false,
                 },
@@ -434,10 +434,7 @@ impl SliceSeq {
                     TransformType::RandSwap() => self.do_rand_swap(),
                     TransformType::QuantRepeat { quant, slice_index } => {
                         // buff len
-                        let local_buff = self
-                            .local_buffer
-                            .as_ref()
-                            .expect("buffer here");
+                        let local_buff = self.local_buffer.as_ref().expect("buffer here");
 
                         // how many bars we have
                         let num_bars = Samples(local_buff.frames.len() as i64).bars(
@@ -483,6 +480,7 @@ impl SliceSeq {
             .find(|s| **s <= self.get_local_clock() as usize)
             // return the last slice index if we are not there
             .unwrap_or(self.slices_playing.ord_keys().last().unwrap());
+
         *curr_slice_idx
     }
 
@@ -490,15 +488,21 @@ impl SliceSeq {
         // check if the current slice 'virtually' playing in the next buffer is new
         // relatively to the current slice at the buffer change request time
         // what will be the next slice index in the new buffer ?
-        let next_buff_positions = &gen_buffer.positions[&self.positions_mode];
+        let next_buff_positions = &gen_buffer
+            .positions
+            .get(&self.positions_mode)
+            .expect("should be indexable by position mode");
+
         // clock wrapped in the next buffer scale
         let wrapped_clock = self.get_next_clock(gen_buffer) as usize;
+
         // current slice idx in the next buffer
         let mut curr_slice_idx = next_buff_positions
             .iter()
             .rev()
             .find(|x| **x <= wrapped_clock)
             .expect("current slice idx in the next buffer");
+            
         // should never fail
         //  if is not the same, brutally change buffer
         if *curr_slice_idx != change_req_idx {
@@ -621,7 +625,7 @@ impl SlicerGen {
                 slices_temp: SliceMap::new(),
                 slices_playing: SliceMap::new(),
                 curr_slice: Default::default(),
-                positions_mode: super::PositionsMode::QonsetMode(),
+                positions_mode: super::PositionsMode::OnsetMode(),
                 next_transform: None,
                 next_buffer_change: None,
                 cross_fade_buff: Vec::with_capacity(10000),
