@@ -98,7 +98,6 @@ pub fn detect_onsets(samples: &[f32]) -> Vec<usize> {
                 }
 
                 if latest_detection < detected {
-
                     positions.push(detected as usize);
                     latest_detection = detected;
                 }

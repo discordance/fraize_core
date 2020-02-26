@@ -88,7 +88,6 @@ impl SmartBuffer {
 
     /// Copy SmartBuffer without memory allocations
     pub fn copy_from(&mut self, from: &SmartBuffer) {
-//        let before = GLOBAL.get() as i64;
         // start by the frames
         self.frames
             .resize(from.frames.len(), Stereo::<f32>::equilibrium());
@@ -111,14 +110,10 @@ impl SmartBuffer {
                 val.copy_from_slice(&from_vec[..]);
             }
         }
-
-//        let after = GLOBAL.get() as i64;
-//        println!("memory diff: {} bytes", after-before);
     }
 
     /// Loads and analyse a wave file
     pub fn load_wave(&mut self, path: &str) -> Result<bool, &str> {
-        println!("load {}", path);
         // load some audio
         let reader = match WavReader::open(path) {
             Ok(r) => r,
@@ -159,21 +154,17 @@ impl SmartBuffer {
             Some((orig_tempo, beats)) => {
                 self.original_tempo = orig_tempo;
                 self.num_beats = beats;
-                // println!("tempo {}, beats: {}", self.original_tempo, self.num_beats);
             }
             None => {
                 // detect from aubio
                 self.original_tempo = analytics::detect_bpm(&samples[..]);
                 let beats = Samples(samples.len() as i64 / 2).beats(self.original_tempo, 44_100.0);
                 self.num_beats = beats as usize;
-                println!("tempo {}, beats: {}", self.original_tempo, self.num_beats);
             }
         }
 
         // compute onset positions
         let onset_positions = analytics::detect_onsets(&samples[..]);
-
-        println!("onset_positions {}", onset_positions.len());
 
         self.set_postions(samples, self.num_beats, onset_positions);
     }

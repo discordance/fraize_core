@@ -50,6 +50,7 @@ pub fn initialize_audio(
         .default_output_format()
         .expect("should have a default format");
 
+    // it's doing weird things otherwise 
     if format.sample_rate != cpal::SampleRate(44100) {
         println!("Unsupported Device SampleRate, should be 44100");
         ::std::process::exit(1);

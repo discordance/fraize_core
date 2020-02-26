@@ -1,7 +1,9 @@
+extern crate heapless;
 extern crate rand;
 extern crate sample;
 extern crate time_calc;
-//extern crate trallocator;
+
+use self::heapless::consts::U256;
 
 use self::rand::Rng;
 use self::sample::frame::Stereo;
@@ -9,14 +11,13 @@ use self::sample::Frame;
 use self::time_calc::{Samples, Ticks, TimeSig};
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use control::{ControlMessage, SlicerMessage};
-use sample_gen::gen_utils::MicroFadeOut;
 use std::collections::HashMap;
 use std::f64;
 
 /// Used to define slicer fadeins fadeouts in samples
 const SLICE_FADE_IN: usize = 64;
-const SLICE_FADE_OUT: usize = 256;
-const SLICER_CROSS_FADE: usize = 784;
+const SLICE_FADE_OUT: usize = 128;
+type CROOS = U256;
 
 /// A Slice struct, represnte a slice of audio in the buffer
 /// Doesn't store any audio data, but start and end index
@@ -67,8 +68,6 @@ impl Slice {
             _ => self.len() as i64,
         };
 
-        //        new_len = self.len() as i64;
-
         // return enveloped, ajusted
         next_frame
             .scale_amp(super::gen_utils::fade_in(
@@ -89,25 +88,25 @@ impl Slice {
     }
 
     /// get the slice of the remaining frames
-    fn fill_remaining(&self, frames: &[Stereo<f32>], fill: &mut Vec<Stereo<f32>>) {
-        if !self.is_consumed() {
-            let f = &frames
-                .get(self.start + self.cursor..self.end)
-                .expect("no overflow");
-            fill.resize(f.len(), Stereo::<f32>::equilibrium());
-            fill.copy_from_slice(f);
-            return;
-        }
-        fill.clear()
-    }
+    // fn fill_remaining(&self, frames: &[Stereo<f32>], fill: &mut Vec<Stereo<f32>>) {
+    //     if !self.is_consumed() {
+    //         let f = &frames
+    //             .get(self.start + self.cursor..self.end)
+    //             .expect("no overflow");
+    //         fill.resize(f.len(), Stereo::<f32>::equilibrium());
+    //         fill.copy_from_slice(f);
+    //         return;
+    //     }
+    //     fill.clear()
+    // }
 
     /// how many left
-    fn remaining_ct(&self) -> usize {
-        if !self.is_consumed() {
-            return self.len() - self.cursor;
-        }
-        0
-    }
+    // fn remaining_ct(&self) -> usize {
+    //     if !self.is_consumed() {
+    //         return self.len() - self.cursor;
+    //     }
+    //     0
+    // }
 
     /// get slice len
     fn len(&self) -> usize {
@@ -260,17 +259,13 @@ struct SliceSeq {
     slices_temp: SliceMap,
     /// Currently playing Slices
     slices_playing: SliceMap,
-    /// Currently playing Slice that will be consumed
+    /// Tuple currently playing Slice that will be consumed
     /// Conveniently stores the index also
-    curr_slice: (usize, Slice),
-    /// Pending next buffer change.
-    /// 0-> current slice idx in next buffer
-    /// 1-> next slice idx in next buffer
-    next_buffer_change: Option<(usize, usize)>,
+    curr_slice_tup: (usize, Slice),
     /// pending next transfrom
     next_transform: Option<TransformType>,
-    cross_fade_buff: Vec<Stereo<f32>>,
-    cross_fade_ct: usize,
+    /// crossfade buffer
+    crossfade_buffer: heapless::spsc::Queue<Stereo<f32>, CROOS>,
 }
 
 impl SliceSeq {
@@ -289,18 +284,6 @@ impl SliceSeq {
             let abs = Ticks(self.ticks as i64).samples(original_tempo, PPQN, 44_100.0) as u64
                 % lb.frames.len() as u64;
             return abs + self.elapsed_frames as u64;
-        }
-        0
-    }
-
-    /// Computes the clock in frames scaled / wrapped according to the next smart buffer
-    fn get_next_clock(&self, next: &SmartBuffer) -> u64 {
-        if let Some(lb) = &self.local_buffer {
-            let original_tempo = next.original_tempo;
-            let this_tempo = lb.original_tempo;
-            return Ticks(self.ticks as i64).samples(original_tempo, PPQN, 44_100.0) as u64
-                % next.frames.len() as u64
-                + (self.elapsed_frames * (original_tempo / this_tempo)) as u64;
         }
         0
     }
@@ -324,43 +307,41 @@ impl SliceSeq {
         self.next_transform = t;
     }
 
-    /// Swap the local frame buffer with the new one according new positions in the new buffer.
-    /// Takes immediate action if the local buffer is empty
-    fn sync_load_buffer(&mut self, next_buffer: &SmartBuffer) -> bool {
-        match self.local_buffer {
-            // we don't have a local buffer yet, so we init (will alloc memory)
-            None => {
-                self.do_load_buffer(next_buffer);
-                return true;
-            }
-            // postpone
-            Some(_) => {
-                // what will be the next slice index in the new buffer ?
-                let next_buff_positions = &next_buffer.positions[&self.positions_mode];
+    /// fills the crossfade buffer
+    fn fill_crossfade_buffer(&mut self) {
+        match &self.local_buffer {
+            None => (),
+            Some(local_buff) => {
+                if self.crossfade_buffer.len() > 0 {
+                    println!("fuk {}", self.crossfade_buffer.len());
+                }
 
-                // clock wrapped in the next buffer scale
-                let wrapped_clock = self.get_next_clock(next_buffer) as usize;
+                // empty it
+                for _i in 0..self.crossfade_buffer.len() {
+                    self.crossfade_buffer.dequeue();
+                }
 
-                // current slice idx in the next buffer
-                let curr_slice_idx = next_buff_positions
-                    .iter()
-                    .rev()
-                    .find(|x| **x <= wrapped_clock)
-                    .unwrap_or(&0);
-
-                // get the next slice index to estimate the length of the fade out
-                // current slice idx in the next buffer
-                let next_slice_idx = next_buff_positions
-                    .iter()
-                    .find(|x| **x > *curr_slice_idx)
-                    .unwrap_or(&0);
-
-                // we want to change the buffer when the this current slice (on the next buffer) will be on the next slice
-                self.next_buffer_change = Some((*curr_slice_idx, *next_slice_idx));
-
-                return true;
+                // fill with current slice
+                for _i in 0..self.crossfade_buffer.capacity() {
+                    self.crossfade_buffer
+                        .enqueue(
+                            self.curr_slice_tup
+                                .1
+                                .next_frame(self.playback_rate(), &local_buff.frames[..]),
+                        )
+                        .expect("no overflow");
+                }
             }
         }
+    }
+
+    /// Swap the local frame buffer with the new one
+    fn sync_load_buffer(&mut self, next_buffer: &SmartBuffer) {
+        // prepare crossfade buffer
+        self.fill_crossfade_buffer();
+
+        // switch
+        self.do_load_buffer(next_buffer);
     }
 
     /// Copy a smart buffer frames into the local buffer
@@ -415,17 +396,12 @@ impl SliceSeq {
             return;
         }
 
-        // we have a next buffer change pending
-        if let Some((change_req_idx, next_idx)) = self.next_buffer_change {
-            self.check_make_buff_change(gen_buffer, change_req_idx)
-        }
-
         // compute current slice index in the playing slices according to the clock
         let curr_slice_idx = self.current_slice_idx();
 
         // check if clock given current slice is the same as the playing current slice
         // if not, we should set the self.curren_slice
-        if self.curr_slice.0 != curr_slice_idx {
+        if self.curr_slice_tup.0 != curr_slice_idx {
             // NEW SLICE HERE
             // this is probably the time to check for transforms
             if let Some(nt) = self.next_transform {
@@ -458,13 +434,13 @@ impl SliceSeq {
                 // current slice have moved now, shadowing
                 let curr_slice_idx = self.current_slice_idx();
                 let next_curr_slice = *self.slices_playing.get(&curr_slice_idx).unwrap();
-                self.curr_slice = (curr_slice_idx, next_curr_slice);
+                self.curr_slice_tup = (curr_slice_idx, next_curr_slice);
                 return;
             }
 
             // set the new current slice, normally
             let next_curr_slice = *self.slices_playing.get(&curr_slice_idx).unwrap();
-            self.curr_slice = (curr_slice_idx, next_curr_slice);
+            self.curr_slice_tup = (curr_slice_idx, next_curr_slice);
         }
     }
 
@@ -484,47 +460,9 @@ impl SliceSeq {
         *curr_slice_idx
     }
 
-    fn check_make_buff_change(&mut self, gen_buffer: &SmartBuffer, change_req_idx: usize) -> () {
-        // check if the current slice 'virtually' playing in the next buffer is new
-        // relatively to the current slice at the buffer change request time
-        // what will be the next slice index in the new buffer ?
-        let next_buff_positions = &gen_buffer
-            .positions
-            .get(&self.positions_mode)
-            .expect("should be indexable by position mode");
-
-        // clock wrapped in the next buffer scale
-        let wrapped_clock = self.get_next_clock(gen_buffer) as usize;
-
-        // current slice idx in the next buffer
-        let mut curr_slice_idx = next_buff_positions
-            .iter()
-            .rev()
-            .find(|x| **x <= wrapped_clock)
-            .expect("current slice idx in the next buffer");
-            
-        // should never fail
-        //  if is not the same, brutally change buffer
-        if *curr_slice_idx != change_req_idx {
-            // fill what remains in the crossfade buff
-            self.cross_fade_ct = 0;
-            self.curr_slice.1.fill_remaining(
-                &self.local_buffer.as_ref().expect("checked before").frames[..],
-                &mut self.cross_fade_buff,
-            );
-
-            // perform buffer swap
-            self.do_load_buffer(gen_buffer);
-
-            // remove the buffer change pending
-            self.next_buffer_change = None;
-        }
-    }
-
     /// get next frame according to the given clock frames index and the stae of slices.
     /// it uses playback_speed to adjust the slice envelope
     /// get the ref of the sample generator frames, and use a local copy
-    /// @TODO needs to apply a short fadeout when queue a transform, still have clicks sometimes
     fn next_frame(&mut self, gen_buffer: &SmartBuffer) -> Stereo<f32> {
         // !! update first !!
         self.update(gen_buffer);
@@ -541,17 +479,16 @@ impl SliceSeq {
             Some(local_buff) => {
                 // grab next frame
                 let mut next_frame = self
-                    .curr_slice
+                    .curr_slice_tup
                     .1
                     .next_frame(self.playback_rate(), &local_buff.frames[..]);
 
                 // crossfade
-                if self.cross_fade_buff.len() >= SLICER_CROSS_FADE {
-                    let old_f = *self.cross_fade_buff.first().unwrap();
-                    self.cross_fade_buff.remove(0);
+                if self.crossfade_buffer.len() > 0 {
+                    let old_f = self.crossfade_buffer.dequeue().unwrap();
 
                     let mut old_ratio =
-                        1.0 - (self.cross_fade_ct as f32 / SLICER_CROSS_FADE as f32);
+                        1.0 - (self.crossfade_buffer.capacity() as f32 - self.crossfade_buffer.len() as f32) / self.crossfade_buffer.capacity() as f32;
                     if old_ratio < 0.0 {
                         old_ratio = 0.0;
                     }
@@ -560,8 +497,8 @@ impl SliceSeq {
 
                     next_frame = next_frame.scale_amp(new_ratio);
                     next_frame = next_frame.add_amp(old_f.scale_amp(old_ratio));
-                    self.cross_fade_ct += 1;
                 }
+
                 return next_frame;
             }
         }
@@ -624,12 +561,10 @@ impl SlicerGen {
                 slices_orig: SliceMap::new(),
                 slices_temp: SliceMap::new(),
                 slices_playing: SliceMap::new(),
-                curr_slice: Default::default(),
-                positions_mode: super::PositionsMode::OnsetMode(),
+                curr_slice_tup: Default::default(),
+                positions_mode: super::PositionsMode::QonsetMode(),
                 next_transform: None,
-                next_buffer_change: None,
-                cross_fade_buff: Vec::with_capacity(10000),
-                cross_fade_ct: 0,
+                crossfade_buffer: heapless::spsc::Queue::new(),
             },
         }
     }
@@ -724,7 +659,7 @@ impl SampleGenerator for SlicerGen {
                             self.slice_seq
                                 .push_transform(Some(TransformType::QuantRepeat {
                                     quant,
-                                    slice_index: self.slice_seq.curr_slice.0, // gives the index
+                                    slice_index: self.slice_seq.curr_slice_tup.0, // gives the index
                                 }));
                         }
                         // all pass trought
