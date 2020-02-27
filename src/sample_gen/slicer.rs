@@ -3,7 +3,7 @@ extern crate rand;
 extern crate sample;
 extern crate time_calc;
 
-use self::heapless::consts::U256;
+use self::heapless::consts::U512;
 
 use self::rand::Rng;
 use self::sample::frame::Stereo;
@@ -17,7 +17,7 @@ use std::f64;
 /// Used to define slicer fadeins fadeouts in samples
 const SLICE_FADE_IN: usize = 64;
 const SLICE_FADE_OUT: usize = 128;
-type CROOS = U256;
+type CROOS = U512;
 
 /// A Slice struct, represnte a slice of audio in the buffer
 /// Doesn't store any audio data, but start and end index
@@ -562,7 +562,7 @@ impl SlicerGen {
                 slices_temp: SliceMap::new(),
                 slices_playing: SliceMap::new(),
                 curr_slice_tup: Default::default(),
-                positions_mode: super::PositionsMode::QonsetMode(),
+                positions_mode: super::PositionsMode::Bar8Mode(),
                 next_transform: None,
                 crossfade_buffer: heapless::spsc::Queue::new(),
             },
