@@ -207,7 +207,6 @@ fn midi_cb(
         }
         Err(_) => {} // do nothing
     }
-    //  println!("{} seconds loop midi LOOP CB .", start.to(end));
 }
 
 // initialize midi machinery

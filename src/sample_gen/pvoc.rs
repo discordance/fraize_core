@@ -272,8 +272,8 @@ impl SampleGenerator for PVOCGen {
 
     /// Loads a SmartBuffer, moving it
     fn load_buffer(&mut self, smartbuf: &SmartBuffer) {
-        // clone is faster ....
-        self.sample_gen.smartbuf = smartbuf.clone();
+        //
+        self.sample_gen.smartbuf.copy_from(smartbuf);
     }
 
     /// Sync the pvoc according to global sync values

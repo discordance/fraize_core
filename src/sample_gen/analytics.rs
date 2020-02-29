@@ -8,7 +8,7 @@ use std::path::Path;
 use self::aubio::onset::Onset;
 use self::aubio::tempo::Tempo;
 use self::num::ToPrimitive;
-use self::time_calc::Samples;
+use self::time_calc::{Bpm, Samples};
 
 // consts
 const HOP_SIZE: usize = 512;
@@ -42,13 +42,11 @@ fn parse_filepath_beats(path: &str) -> Result<usize, &str> {
 /// Get the original tempo based on the beat value written in the filename, or analized with Aubio if not present.
 /// Returns original tempo as computed from file name and the number of beats
 /// @TODO take care of the the aubio part
-pub fn get_original_tempo(path: &str, num_samples: usize) -> Option<(f64, usize)> {
+pub fn read_original_tempo(path: &str, num_samples: usize) -> Option<(f64, usize)> {
     // compute number of beats
     let num_beats = match parse_filepath_beats(path) {
         Ok(n) => n,
-        Err(err) => {
-            return None
-        }
+        Err(err) => return None,
     };
     let ms = Samples((num_samples as i64) / 2).to_ms(44_100.0);
 
@@ -59,17 +57,21 @@ pub fn get_original_tempo(path: &str, num_samples: usize) -> Option<(f64, usize)
 /// Onset detector via Aubio.
 pub fn detect_onsets(samples: &[f32]) -> Vec<usize> {
     let len = samples.len() / 2;
-    let mono: Vec<f32> = samples.iter().step_by(2).map(|x| *x).collect();
+    let mono: Vec<f32> = samples
+        .iter()
+        .step_by(2)
+        .zip(samples.iter().step_by(2).skip(1))
+        .map(|(l, r)| (l + r) / 2.0)
+        .collect();
     let mut chunk_iter = mono.chunks(HOP_SIZE);
 
     // onset
     let mut onset = Onset::new(WIND_SIZE, HOP_SIZE, SR).expect("Onset::new");
 
     // params
-    // @TODO review this as it sometimes doesn't produce onsets
-    onset.set_threshold(0.9);
-    onset.set_silence(-40.0);
-    onset.set_minioi(0.005);
+    onset.set_threshold(0.3);
+    onset.set_silence(-30.0);
+    onset.set_minioi(0.02);
 
     // detected positions
     let mut positions: Vec<usize> = Vec::new();
@@ -90,6 +92,11 @@ pub fn detect_onsets(samples: &[f32]) -> Vec<usize> {
                 onset.execute(&chunk);
                 let detected = onset.last_onset();
 
+                // check for some invalid, bug from aubio
+                if detected > len as u32 {
+                    continue;
+                }
+
                 if latest_detection < detected {
                     positions.push(detected as usize);
                     latest_detection = detected;
@@ -109,9 +116,16 @@ pub fn detect_onsets(samples: &[f32]) -> Vec<usize> {
 /// BPM detector via aubio.
 pub fn detect_bpm(samples: &[f32]) -> f64 {
     // mono version
-    let mono: Vec<f32> = samples.iter().step_by(2).map(|x| *x).collect();
-    let mut chunk_iter = mono.chunks(HOP_SIZE/4); // by chunk
-    let mut tempo = Tempo::new(WIND_SIZE/4, HOP_SIZE/4, SR).expect("Tempo::new");
+    let mono: Vec<f32> = samples
+        .iter()
+        .step_by(2)
+        .zip(samples.iter().step_by(2).skip(1))
+        .map(|(l, r)| (l + r) / 2.0)
+        .collect();
+        
+    // let mono: Vec<f32> = samples.iter().step_by(2).map(|x| *x).collect();
+    let mut chunk_iter = mono.chunks(HOP_SIZE / 4); // by chunk
+    let mut tempo = Tempo::new(WIND_SIZE / 4, HOP_SIZE / 4, SR).expect("Tempo::new");
     // let mut detected_tempo = 120.0;
 
     loop {
@@ -119,7 +133,7 @@ pub fn detect_bpm(samples: &[f32]) -> f64 {
         match next {
             Some(chunk) => {
                 // break the fft
-                if chunk.len() != HOP_SIZE/4 {
+                if chunk.len() != HOP_SIZE / 4 {
                     break;
                 }
                 tempo.execute(&chunk);
@@ -128,8 +142,19 @@ pub fn detect_bpm(samples: &[f32]) -> f64 {
         }
     }
 
+    // read analysed
+    let mut analysed_t = tempo.bpm().expect("Should have analysed a tempo").floor();
+
+    // heuristic that is a bit dirty
+    if analysed_t < 80.0 {
+        analysed_t *= 2.0;
+    }
+    if analysed_t > 190.0 {
+        analysed_t /= 2.0;
+    }
+
     // return
-    tempo.bpm().unwrap().floor() as f64
+    analysed_t as f64
 }
 
 /// Basic division onsets position.

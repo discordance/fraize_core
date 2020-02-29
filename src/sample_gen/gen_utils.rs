@@ -1,129 +1,74 @@
+#[cfg(test)]
+extern crate plotlib;
+
 extern crate sample;
-use self::sample::frame::Stereo;
-use self::sample::Frame;
+extern crate easer;
+
+use self::easer::functions::*;
 use std::f32;
 
-/// A clamped fade_in
+/// A clamped cubic fade_in
 pub fn fade_in(t: i64, len: i64) -> f32 {
-    let c1 = f32::consts::E.powf(t as f32 / len as f32) - 1.0;
-    let c2 = f32::consts::E - 1.0;
-    let r = c1 / c2;
-    if r < 1.0 {
-        return r;
+    if t == 0 {
+        return 0.0;
     }
-    return 1.0;
+    if t >= len {
+        return 1.0;
+    }
+    Cubic::ease_in_out(t as f32, 0.0, 1.0, len as f32)
 }
 
-/// a clamped fade out
-/// @TODO this env does not sound good for basses
+/// A cubic fade out
 pub fn fade_out(t: i64, len: i64, end: i64) -> f32 {
-    let c1 = f32::consts::E.powf((end as f32 - t as f32) / len as f32) - 1.0;
-    let c2 = f32::consts::E - 1.0;
-    let r = c1 / c2;
-    if r < 1.0 {
-        return r;
+    if t < end-len {
+        return 1.0
     }
-    return 1.0;
-}
-/// Helper to exec microfades out
-#[derive(Debug, Default, Copy, Clone)]
-pub struct MicroFadeOut {
-    /// the ramp t in samples
-    cursor: usize,
-    /// total micro fade time
-    duration: usize,
+    if t >= end {
+        return 0.0
+    }
+    Cubic::ease_in_out((end-t) as f32, 0.0, 1.0, len as f32)
 }
 
-impl MicroFadeOut {
-    /// set the micro fade at the start
-    pub fn start(&mut self, duration: usize) {
-        // needed
-        assert_eq!(duration % 2, 0);
+#[cfg(test)]
+mod tests {
 
-        // duration must be a multiple of 2
-        self.cursor = 0;
-        self.duration = duration;
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::plotlib::style::Line;
+    use super::*;
+
+    #[test]
+    fn test_fade_in() {
+        let mut data: Vec<(f64, f64)> = Vec::new();
+
+        for t in 0..400 {
+            let y = fade_in(t, 100);
+            data.push((t as f64, y as f64));
+        }
+
+        let l1 = plotlib::line::Line::new(&data[..])
+            .style(plotlib::line::Style::new().colour("red"));
+        let v = plotlib::view::ContinuousView::new().add(&l1);
+        plotlib::page::Page::single(&v)
+            .save("plots/fade_in.svg")
+            .expect("saving svg");
     }
 
-    /// advance the state of the fade and check if we are in the middle (zero crossing) position
-    pub fn next_and_check(&mut self) -> bool {
-        self.cursor += 1;
-        if self.cursor == self.duration {
-            return true;
-        }
-        return false;
-    }
+    #[test]
+    fn test_fade_out() {
+        let mut data: Vec<(f64, f64)> = Vec::new();
 
-    /// perform micro frade on the given frame
-    pub fn fade_frame(&self, frame: Stereo<f32>) -> Stereo<f32> {
-        let d = self.duration;
-        if self.cursor < d {
-            return // fade out everything before  self.duration / 2
-              frame.scale_amp(super::gen_utils::fade_out(
-                  self.cursor as i64,
-                  d as i64,
-                  d as i64
-              ));
+        for t in 0..800 {
+            let y = fade_out(t, 100, 400);
+            data.push((t as f64, y as f64));
+            // print!("{},", y);
         }
-        if self.cursor >= d {
-            return Stereo::<f32>::equilibrium();
-        }
-        //
-        frame
-    }
-}
 
-/// Helper to exec microfades out->in
-#[derive(Debug, Default, Copy, Clone)]
-pub struct MicroFadeOutIn {
-    /// the ramp t in samples
-    cursor: usize,
-    /// total micro fade time
-    duration: usize,
-}
-
-impl MicroFadeOutIn {
-    /// set the micro fade at the start
-    pub fn start(&mut self, duration: usize) {
-        // needed
-        assert_eq!(duration % 2, 0);
-
-        // duration must be a multiple of 2
-        self.cursor = 0;
-        self.duration = duration;
-    }
-
-    /// advance the state of the fade and check if we are in the middle (zero crossing) position
-    pub fn next_and_check(&mut self) -> bool {
-        self.cursor += 1;
-        if self.cursor == self.duration / 2 {
-            return true;
-        }
-        return false;
-    }
-
-    /// perform micro frade on the given frame
-    pub fn fade_frame(&self, frame: Stereo<f32>) -> Stereo<f32> {
-        let d = self.duration / 2;
-        if self.cursor < d {
-            return // fade out everything before  self.duration / 2
-              frame.scale_amp(super::gen_utils::fade_out(
-                  self.cursor as i64,
-                  d as i64,
-                  d as i64
-              ));
-        }
-        if self.cursor == d {
-            return Stereo::<f32>::equilibrium();
-        }
-        if self.cursor > d {
-            return frame.scale_amp(super::gen_utils::fade_in(
-                (self.cursor - d) as i64,
-                d as i64,
-            ));
-        }
-        //
-        frame
+        let l1 = plotlib::line::Line::new(&data[..])
+            .style(plotlib::line::Style::new().colour("red"));
+        let v = plotlib::view::ContinuousView::new().add(&l1);
+        plotlib::page::Page::single(&v)
+            .save("plots/fade_out.svg")
+            .expect("saving svg");
     }
 }
 

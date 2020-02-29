@@ -224,8 +224,7 @@ impl AudioMixer {
 
                 // pan stage
                 frame = frame.pan(track.pan.get_param(buff_size));
-                //        println!("{:?}", frame);
-
+   
                 // mix stage
                 acc[0] += frame[0] as f64;
                 acc[1] += frame[1] as f64;
@@ -241,6 +240,7 @@ impl AudioMixer {
     /// Must iterate to consume all messages for one buffer cycle util its empty.
     /// This is not fetching commands at sample level.
     fn fetch_commands(&mut self) {
+        // loop until all simultaneous commands are fetched
         loop {
             match self.command_rx.try_recv() {
                 // we have a message

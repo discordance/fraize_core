@@ -41,8 +41,8 @@ pub const PPQN: Ppqn = 24;
 /// how many sample to fade in / out to avoid clicks when resync audio
 const NOCLICK_FADE_LENGTH: u64 = 64;
 
-/// SliceMode defines how the slices are cut in a smart buffer.
-/// Can be OnsetDetection or fixed BAR divisions.
+/// PositionsMode defines how the slices are cut in a smart buffer.
+/// Can be Onset Detection or fixed BAR divisions.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PositionsMode {
     /// Natural detected onsets.
@@ -88,7 +88,6 @@ impl SmartBuffer {
 
     /// Copy SmartBuffer without memory allocations
     pub fn copy_from(&mut self, from: &SmartBuffer) {
-//        let before = GLOBAL.get() as i64;
         // start by the frames
         self.frames
             .resize(from.frames.len(), Stereo::<f32>::equilibrium());
@@ -111,9 +110,6 @@ impl SmartBuffer {
                 val.copy_from_slice(&from_vec[..]);
             }
         }
-
-//        let after = GLOBAL.get() as i64;
-//        println!("memory diff: {} bytes", after-before);
     }
 
     /// Loads and analyse a wave file
@@ -129,6 +125,7 @@ impl SmartBuffer {
 
         // samples preparation
         // @TODO must check better the wave formats
+        // @TODO 24bit fails in silence
         let mut samples: Vec<f32> = reader
             .into_samples::<i16>()
             .filter_map(Result::ok)
@@ -153,18 +150,16 @@ impl SmartBuffer {
     /// perform various sample analysis
     fn analyse(&mut self, samples: &[f32], path: &str) {
         // parse tempo from filename if possible
-        match analytics::get_original_tempo(path, samples.len()) {
+        match analytics::read_original_tempo(path, samples.len()) {
             Some((orig_tempo, beats)) => {
                 self.original_tempo = orig_tempo;
                 self.num_beats = beats;
-                // println!("tempo {}, beats: {}", self.original_tempo, self.num_beats);
             }
             None => {
                 // detect from aubio
                 self.original_tempo = analytics::detect_bpm(&samples[..]);
                 let beats = Samples(samples.len() as i64 / 2).beats(self.original_tempo, 44_100.0);
                 self.num_beats = beats as usize;
-                println!("tempo {}, beats: {}", self.original_tempo, self.num_beats);
             }
         }
 
@@ -179,6 +174,7 @@ impl SmartBuffer {
         // sometime we can't calculate onsets
         if onset_positions.len() > 2 {
             // quantize onset for the quantized mode
+            // @TODO could be parametrized
             let quantized =
                 analytics::quantize_pos(&onset_positions, self.frames.len() / (16 * beats));
 
