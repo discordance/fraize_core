@@ -20,6 +20,7 @@ serde_json = "1.0"
 time = "*"
 rosc = "0.1.6"
 heapless = "0.5.3"
+easer = "0.2.1"
 
 
 [dependencies.cpal]
@@ -30,6 +31,9 @@ git = "https://github.com/discordance/cpal.git"
 [dependencies.aubio]
 # modified aubio wrapper
 git = "https://github.com/discordance/aubio-rs.git"
+
+[dev-dependencies]
+plotlib = "0.4.0"
 
 [profile.dev]
 opt-level = 2
