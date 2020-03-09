@@ -236,7 +236,7 @@ fn handle_incoming_packet(
                                 track_num: *idx as usize,
                                 message: SlicerMessage::Transform(TransformType::QuantRepeat{
                                     quant: *q as usize,
-                                    slice_index: 0 // unused here
+                                    slice_index: 0, // unused here
                                 })
                             });
                         }

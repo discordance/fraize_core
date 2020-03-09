@@ -4,13 +4,13 @@ extern crate sample;
 extern crate time_calc;
 
 // usefull for crossfade
-use self::heapless::consts::U256;
-type CrossfadeLen = U256;
+use self::heapless::consts::U512;
+type CrossfadeLen = U512;
 
 use self::rand::Rng;
 use self::sample::frame::Stereo;
 use self::sample::Frame;
-use self::time_calc::Ticks;
+use self::time_calc::{Samples, TimeSig, Ticks, Bars};
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
 use control::{ControlMessage, SlicerMessage};
 use std::collections::HashMap;
@@ -95,9 +95,13 @@ impl Slice {
         return self.end - self.start;
     }
 
-    /// rest
-    fn remaining(&self) -> isize {
-        return self.end as isize - (self.start as isize + self.cursor as isize);
+    /// Remaining samples
+    fn remaining(&self) -> usize {
+        let r = self.end as isize - (self.start as isize + self.cursor as isize);
+        if r < 0 {
+            return 0;
+        }
+        return r as usize;
     }
 }
 
@@ -110,7 +114,8 @@ pub enum TransformType {
     RandSwap(),
     /// Repeat a given Slice on index according to a defined quantization in bar div
     QuantRepeat {
-        // our length relative to bar div
+        // repeat length relative to bar
+        // 1/quant
         quant: usize,
         // the slice to repeat forever
         slice_index: usize,
@@ -205,7 +210,7 @@ impl SliceMap {
             let old_slice = self.unord_slices.get_mut(&self.ord_keys[idx]).unwrap(); // should not fail;
 
             // fix length
-            new.end = new.start+old_slice.len();
+            new.end = new.start+old_slice.len()-1;
 
             // replace                                                                             // replace
             *old_slice = new;
@@ -216,6 +221,9 @@ impl SliceMap {
     fn quant_repeat(&mut self, quant: usize, slice_idx: usize, max: usize) {
         // copy the slice to repeat
         let mut to_repeat = *self.unord_slices.get(&slice_idx).unwrap();
+
+        // set new length according to the quant
+        to_repeat.end = to_repeat.start+quant-1;
 
         // clear
         self.clear();
@@ -331,18 +339,12 @@ impl SliceSeq {
         }
     }
 
-    /// Swap the local frame buffer with the new one
-    fn load_buffer(&mut self, next_buffer: &SmartBuffer) {
+    /// Copy a smart buffer frames into the local buffer
+    /// trying to not generate clicks
+    fn load_buffer(&mut self, buffer: &SmartBuffer) {
         // prepare crossfade buffer
         self.fill_crossfade_buffer();
 
-        // switch
-        self.do_load_buffer(next_buffer);
-    }
-
-    /// Copy a smart buffer frames into the local buffer
-    /// trying to not generate clicks
-    fn do_load_buffer(&mut self, buffer: &SmartBuffer) {
         // check if we have a
         match &mut self.local_buffer {
             None => {
@@ -379,6 +381,12 @@ impl SliceSeq {
         // init the currently playing slice map 
         self.slices_playing.copy_from(&self.slices_orig);
 
+        // adjust current slice
+        self.adjust_current_slice();
+    }
+
+    /// Ajust current slice to local clock
+    fn adjust_current_slice(&mut self) {
         // compute current slice index in the playing slices according to the clock
         let curr_slice_idx = self.current_slice_idx();
 
@@ -393,15 +401,50 @@ impl SliceSeq {
         self.curr_slice_tup = (curr_slice_idx, curr_slice);
     }
 
-    /// Check for pending transforms and update timely
-    fn update_transform(&mut self) {
+    /// Check if current slice is obsolete and return clock current slice index
+    fn compute_curr_slice(&self) -> (bool, usize) {
+        // compute current slice index in the playing slices according to the clock
+        let curr_slice_idx = self.current_slice_idx();
+
+        (self.curr_slice_tup.0 != curr_slice_idx, curr_slice_idx)
+    }
+
+    /// Check for pending transforms and apply timely
+    fn apply_transform(&mut self) {
         // checks if there is a transform stacked
         if let Some(nt) = self.next_transform {
+            // fill the crossfade buffer with the current slice
+            self.fill_crossfade_buffer();
+
+            // apply according transform
             match nt {
-                TransformType::Reset() => self.do_reset(),
-                TransformType::RandSwap() => self.do_rand_swap(),
-                TransformType::QuantRepeat { quant, slice_index } => (),
+                TransformType::Reset() => { 
+                    self.do_reset();
+                },
+                TransformType::RandSwap() => { 
+                    self.do_rand_swap();
+                },
+                TransformType::QuantRepeat { quant, slice_index } => {
+                    // another way to avoid pattern matching
+                    let local_buff = self.local_buffer.as_ref().expect("buffer here");
+                    
+                    // how many samples per bar
+                    let smpls_per_bar = Bars(1).samples(
+                        local_buff.original_tempo,
+                        TimeSig { top: 4, bottom: 4 },
+                        44_100.0
+                    );
+
+                    // repeat in samples
+                    let quant_samples = smpls_per_bar / quant as i64;
+
+                    // apply repeat
+                    self.do_quant_repeat(quant_samples as usize, slice_index);
+                },
             }
+
+            // adjust current slice (operation above changed it)
+            self.adjust_current_slice();
 
             // unstack
             self.next_transform = None;
@@ -416,62 +459,18 @@ impl SliceSeq {
         }
 
         // compute current slice index in the playing slices according to the clock
-        let curr_slice_idx = self.current_slice_idx();
+        let (is_obsolete, curr_slice_idx) = self.compute_curr_slice();
 
         // check if clock given current slice is the same as the playing current slice
         // if not, we should set the self.curren_slice
-        if self.curr_slice_tup.0 != curr_slice_idx {
+        if is_obsolete {
             // NEW SLICE HERE
-            // this is probably the time to check for transforms
-            // if let Some(nt) = self.next_transform {
-            //     match nt {
-            //         TransformType::Reset() => self.do_reset(),
-            //         TransformType::RandSwap() => self.do_rand_swap(),
-            //         TransformType::QuantRepeat { quant, slice_index } => {
-            //             // buff len
-            //             let local_buff = self.local_buffer.as_ref().expect("buffer here");
-
-            //             // how many bars we have
-            //             let num_bars = Samples(local_buff.frames.len() as i64).bars(
-            //                 local_buff.original_tempo,
-            //                 TimeSig { top: 4, bottom: 4 },
-            //                 44_100.0,
-            //             );
-
-            //             // convert the div in samples
-            //             let mut quant_samples = local_buff.frames.len() / num_bars as usize;
-            //             quant_samples /= quant;
-
-            //             // apply repeat
-            //             self.do_quant_repeat(quant_samples, slice_index)
-            //         }
-            //     }
-
-            //     // unstack
-            //     self.next_transform = None;
-
-            //     // current slice have moved now, shadowing
-            //     let curr_slice_idx = self.current_slice_idx();
-            //     let next_curr_slice = *self.slices_playing.get(&curr_slice_idx).unwrap();
-            //     self.curr_slice_tup = (curr_slice_idx, next_curr_slice);
-            //     return;
-            // }
-
-            // set the new current slice, normally
-            // if !self.curr_slice_tup.1.is_consumed() {
-            //     println!("not consumed {}", self.curr_slice_tup.1.remaining());
-            // }
-
-            // if self.last_frame != Stereo::<f32>::equilibrium() {
-            //     println!("disconti");
-            // }
-
             let next_curr_slice = self.slices_playing.get_by_copy(&curr_slice_idx).unwrap();
             self.curr_slice_tup = (curr_slice_idx, next_curr_slice);
         }
     }
 
-    fn current_slice_idx(&mut self) -> usize {
+    fn current_slice_idx(&self) -> usize {
         // gives an ordered list of the currently playing slices indexes
         let indexes = self.slices_playing.ord_keys();
         // find the first slice index in sample that is just above the clock_frames
@@ -496,7 +495,7 @@ impl SliceSeq {
         self.new_frame();
 
         // updates transforms
-        self.update_transform();
+        self.apply_transform();
 
         // updates the current slice
         self.update_curr_slice(gen_buffer);
@@ -689,12 +688,12 @@ impl SampleGenerator for SlicerGen {
                         // catch repeat to catch the current slice idx
                         TransformType::QuantRepeat {
                             quant,
-                            slice_index: _,
+                            ..
                         } => {
                             self.slice_seq
                                 .push_transform(Some(TransformType::QuantRepeat {
                                     quant,
-                                    slice_index: self.slice_seq.curr_slice_tup.0, // gives the index
+                                    slice_index: self.slice_seq.curr_slice_tup.0,
                                 }));
                         }
                         // all pass trought
