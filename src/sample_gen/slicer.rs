@@ -398,10 +398,8 @@ impl SliceSeq {
         // checks if there is a transform stacked
         if let Some(nt) = self.next_transform {
             match nt {
-                TransformType::Reset() => (),
-                TransformType::RandSwap() => {
-                    self.do_rand_swap()
-                },
+                TransformType::Reset() => self.do_reset(),
+                TransformType::RandSwap() => self.do_rand_swap(),
                 TransformType::QuantRepeat { quant, slice_index } => (),
             }
 
