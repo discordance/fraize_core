@@ -128,7 +128,7 @@ struct SliceMap {
     /// keeps an ordered copy of the keys
     ord_keys: Vec<usize>,
     /// a buffer allowing to apply transforms to ord_keys
-    mangle_keys: Vec<usize>,
+    shifted_keys: Vec<usize>,
 }
 
 impl SliceMap {
@@ -137,7 +137,7 @@ impl SliceMap {
         SliceMap {
             unord_slices: HashMap::with_capacity(128),
             ord_keys: Vec::with_capacity(128),
-            mangle_keys: Vec::with_capacity(128),
+            shifted_keys: Vec::with_capacity(128),
         }
     }
 
@@ -190,19 +190,22 @@ impl SliceMap {
     // needs to be passed the previous slicemap as we are manipulating this one
     fn rand_swap(&mut self, prev_map: &Self) {
         // will use mangle_keys, need to resize just in case
-        self.mangle_keys.resize(self.ord_keys.len(), 0);
-        self.mangle_keys.copy_from_slice(&self.ord_keys[..]);
+        self.shifted_keys.resize(self.ord_keys.len(), 0);
+        self.shifted_keys.copy_from_slice(&self.ord_keys[..]);
 
         // shuffle mangle_keys
-        rand::thread_rng().shuffle(&mut self.mangle_keys);
+        rand::thread_rng().shuffle(&mut self.shifted_keys);
 
         // swap pairwise
-        for (idx, slice_index) in self.mangle_keys.iter_mut().enumerate() {
+        for (idx, slice_index) in self.shifted_keys.iter_mut().enumerate() {
             // get slice from older
-            let new = prev_map.get_by_copy(&slice_index).unwrap(); // should not fail
+            let mut new = prev_map.get_by_copy(&slice_index).unwrap(); // should not fail
 
-            // get the slice in mutable
+            // get the slice in mutable form
             let old_slice = self.unord_slices.get_mut(&self.ord_keys[idx]).unwrap(); // should not fail;
+
+            // fix length
+            new.end = new.start+old_slice.len();
 
             // replace                                                                             // replace
             *old_slice = new;
@@ -351,7 +354,7 @@ impl SliceSeq {
             }
         }
 
-        // get positionxw
+        // get positions
         let positions = &buffer
             .positions
             .get(&self.positions_mode)
@@ -390,11 +393,25 @@ impl SliceSeq {
         self.curr_slice_tup = (curr_slice_idx, curr_slice);
     }
 
-    /// Updates the state of slices
-    /// Applying transforms
-    /// Switching to the next slice
-    /// Changing buffer
-    fn update(&mut self, gen_buffer: &SmartBuffer) {
+    /// Check for pending transforms and update timely
+    fn update_transform(&mut self) {
+        // checks if there is a transform stacked
+        if let Some(nt) = self.next_transform {
+            match nt {
+                TransformType::Reset() => (),
+                TransformType::RandSwap() => {
+                    self.do_rand_swap()
+                },
+                TransformType::QuantRepeat { quant, slice_index } => (),
+            }
+
+            // unstack
+            self.next_transform = None;
+        }    
+    }
+
+    /// Updates the current slice if have to
+    fn update_curr_slice(&mut self, gen_buffer: &SmartBuffer) {
         // nothing to worry about
         if self.local_buffer.is_none() {
             return;
@@ -476,12 +493,15 @@ impl SliceSeq {
     /// it uses playback_speed to adjust the slice envelope
     /// get the ref of the sample generator frames, and use a local copy
     fn next_frame(&mut self, gen_buffer: &SmartBuffer) -> Stereo<f32> {
-        // !! update first !!
-        self.update(gen_buffer);
-
-        // updates the clock
-        // for fine clock
+        // updates the inter ticks elapsed frames
+        // for fine grained clock
         self.new_frame();
+
+        // updates transforms
+        self.update_transform();
+
+        // updates the current slice
+        self.update_curr_slice(gen_buffer);
 
         // check if we have a local buffer
         match &self.local_buffer {
@@ -490,7 +510,7 @@ impl SliceSeq {
             // grab the next frame
             Some(local_buff) => {
                 // grab next frame
-                let mut next_frame = self
+                let next_frame = self
                     .curr_slice_tup
                     .1
                     .next_frame(self.playback_rate(), &local_buff.frames[..]);
@@ -681,7 +701,6 @@ impl SampleGenerator for SlicerGen {
                         }
                         // all pass trought
                         _ => {
-                            println!("transform {:?}", t);
                             self.slice_seq.push_transform(Some(t));
                         }
                     }
