@@ -681,6 +681,7 @@ impl SampleGenerator for SlicerGen {
                         }
                         // all pass trought
                         _ => {
+                            println!("transform {:?}", t);
                             self.slice_seq.push_transform(Some(t));
                         }
                     }
