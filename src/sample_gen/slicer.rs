@@ -3,7 +3,9 @@ extern crate rand;
 extern crate sample;
 extern crate time_calc;
 
-use self::heapless::consts::U512;
+// usefull for crossfade
+use self::heapless::consts::U256;
+type CrossfadeLen = U256;
 
 use self::rand::Rng;
 use self::sample::frame::Stereo;
@@ -16,8 +18,9 @@ use std::f64;
 
 /// Used to define slicer fadeins fadeouts in samples
 const SLICE_FADE_IN: usize = 256;
-const SLICE_FADE_OUT: usize = 1024;
-type CROSSFADE_LEN = U512;
+const SLICE_FADE_OUT: usize = 512;
+
+
 
 /// A Slice struct, represnte a slice of audio in the buffer
 /// Doesn't store any audio data, but start and end index
@@ -258,12 +261,18 @@ struct SliceSeq {
     /// pending next transfrom
     next_transform: Option<TransformType>,
     /// crossfade buffer
-    crossfade_buffer: heapless::spsc::Queue<Stereo<f32>, CROSSFADE_LEN>,
+    crossfade_buffer: heapless::spsc::Queue<Stereo<f32>, CrossfadeLen>,
 }
 
 impl SliceSeq {
     /// Sync the slice sequencer by the ticks and global tempo
     fn sync(&mut self, global_tempo: u64, ticks: u64) {
+        // crossfade if tempo externally changed
+        if self.global_tempo != global_tempo {
+            // prepare crossfade buffer
+            self.fill_crossfade_buffer();
+        }
+
         self.ticks = ticks;
         self.global_tempo = global_tempo;
         // reset elapsed frames
@@ -305,17 +314,8 @@ impl SliceSeq {
         match &self.local_buffer {
             None => (),
             Some(local_buff) => {
-                if self.crossfade_buffer.len() > 0 {
-                    println!("fuk {}", self.crossfade_buffer.len());
-                }
-
-                // empty it
-                for _i in 0..self.crossfade_buffer.len() {
-                    self.crossfade_buffer.dequeue();
-                }
-
                 // fill with current slice
-                for _i in 0..self.crossfade_buffer.capacity() {
+                for _i in 0..(self.crossfade_buffer.capacity()-self.crossfade_buffer.len()) {
                     self.crossfade_buffer
                         .enqueue(
                             self.curr_slice_tup
@@ -623,7 +623,7 @@ impl SampleGenerator for SlicerGen {
     /// Sync the slicer according to a clock
     fn sync(&mut self, global_tempo: u64, tick: u64) {
         // calculate elapsed clock frames according to the original tempo
-        if let Some(lb) = &self.slice_seq.local_buffer {
+        if let Some(_lb) = &self.slice_seq.local_buffer {
             self.slice_seq.sync(global_tempo, tick);
         }
     }
