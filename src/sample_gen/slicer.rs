@@ -1,20 +1,18 @@
-extern crate heapless;
-extern crate rand;
-extern crate sample;
-extern crate time_calc;
 
 // usefull for crossfade
-use self::heapless::consts::U512;
+use heapless::consts::U512;
 type CrossfadeLen = U512;
 
-use self::rand::Rng;
-use self::sample::frame::Stereo;
-use self::sample::Frame;
-use self::time_calc::{Samples, TimeSig, Ticks, Bars};
-use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
-use control::{ControlMessage, SlicerMessage};
+use rand::Rng;
+use sample::frame::Stereo;
+use sample::Frame;
+use time_calc::{TimeSig, Ticks, Bars};
 use std::collections::HashMap;
 use std::f64;
+
+use crate::control::{ControlMessage, SlicerMessage};
+use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
+
 
 /// Used to define slicer fadeins fadeouts in samples
 const SLICE_FADE_IN: usize = 256;

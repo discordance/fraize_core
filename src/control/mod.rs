@@ -2,10 +2,11 @@ extern crate serde;
 extern crate crossbeam_channel;
 
 use self::crossbeam_channel::bounded;
-use config::Config;
+use crate::config::Config;
 use serde::Deserialize;
 use std::thread;
-use sample_gen::slicer::TransformType;
+use crate::sample_gen::slicer::TransformType;
+use crate::midi::MidiTime;
 
 /// ControlMessage Enum is the main message for the control bus
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -91,7 +92,7 @@ pub enum SlicerMessage {
 pub struct PlaybackMessage {
     pub sync: SyncMessage,
     // @TODO should be more generic struct for time
-    pub time: ::midi::MidiTime,
+    pub time: MidiTime,
 }
 
 /// Clock sync message

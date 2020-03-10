@@ -1,8 +1,8 @@
-use sample_gen::SmartBuffer;
 use std::error::Error;
 use std::fs;
 
-use config::Config;
+use crate::config::Config;
+use crate::sample_gen::SmartBuffer;
 
 /// SampleLib Manage samples loading and analytics.
 /// Its like a In-Memory Sample Database
@@ -85,7 +85,7 @@ impl SampleLib {
     }
 
     /// Gets the next sample given a name and a bank, wrapping around
-    pub fn get_sibling_sample(&self, bank: usize, name: &str, order: isize) -> &SmartBuffer {
+    pub fn get_sibling_sample(&self, bank: usize, name: &str, dir: isize) -> &SmartBuffer {
         match self.buffers.get(bank) {
             Some(b) => {
                 // take the matching string
@@ -99,7 +99,7 @@ impl SampleLib {
                         return &self.empty_buff;
                     }
                     Some(pos) => {
-                        let new_pos = pos as isize + order;
+                        let new_pos = pos as isize + dir;
                         let new_pos = (new_pos + (b.len() as isize)) as usize % b.len();
                         return b.get(new_pos).unwrap();
                     }

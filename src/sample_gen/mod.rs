@@ -10,11 +10,6 @@
 //! - RePitch uses a simple linear interpolation. Cubic and Quadratic don't worth the CPU cycles.
 //! - Sliced acts more like a beat slicer à la ReCycle.
 //! - PVoc uses TimeStretching from the Phase Vocoder implemented in Aubio.
-extern crate hound;
-extern crate sample;
-extern crate time_calc;
-//extern crate trallocator;
-
 
 // re-publish submodule repitch as a public module;
 pub mod analytics;
@@ -23,17 +18,13 @@ pub mod pvoc;
 pub mod repitch;
 pub mod slicer;
 
-use self::hound::WavReader;
-use self::sample::frame::Stereo;
-use self::sample::{Frame, Sample};
-use self::time_calc::{Samples, Beats, Ppqn};
-use control::ControlMessage;
+use hound::WavReader;
+use sample::frame::Stereo;
+use sample::{Frame, Sample};
+use time_calc::{Beats, Ppqn, Samples};
 use std::collections::HashMap;
 
-//use std::alloc::System;
-//#[global_allocator]
-//static GLOBAL: trallocator::Trallocator<System> = trallocator::Trallocator::new(System);
-
+use crate::control::ControlMessage;
 
 /// pulse per quarter note
 pub const PPQN: Ppqn = 24;
@@ -123,14 +114,25 @@ impl SmartBuffer {
             }
         };
 
-        // samples preparation
-        // @TODO must check better the wave formats
-        // @TODO 24bit fails in silence
-        let mut samples: Vec<f32> = reader
-            .into_samples::<i16>()
-            .filter_map(Result::ok)
-            .map(i16::to_sample::<f32>)
-            .collect();
+        // get file spec
+        let spec = reader.spec();
+
+        // our samples interleaved
+        let mut samples: Vec<f32> = match spec.bits_per_sample {
+            24 | 32 => reader
+                .into_samples::<i32>()
+                .filter_map(Result::ok)
+                .map(i32::to_sample::<f32>)
+                .collect(),
+            16 => reader
+                .into_samples::<i16>()
+                .filter_map(Result::ok)
+                .map(i16::to_sample::<f32>)
+                .collect(),
+            _ => {
+                return Err("Wave bits_per_sample not supported")
+            }    
+        };
 
         // normalize samples
         // for consistency in volumes + better analysis
@@ -141,7 +143,6 @@ impl SmartBuffer {
         self.frames = frames.to_vec();
 
         // analyse
-        // println!("{}", path);
         self.analyse(&samples[..], path);
 
         Ok(true)
