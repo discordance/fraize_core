@@ -1,4 +1,4 @@
-# MULTI MODAL PHRASE SAMPLER
+# Fraize
 
 An experiment using Rust for audio processing.
 Rust is a promising new language to experiment with audio processing because it provides memory safety without the use of a Garbage Collector, which is a no-go with many real time audio applications.
