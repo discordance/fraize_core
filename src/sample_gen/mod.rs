@@ -15,7 +15,6 @@ extern crate sample;
 extern crate time_calc;
 //extern crate trallocator;
 
-
 // re-publish submodule repitch as a public module;
 pub mod analytics;
 pub mod gen_utils;
@@ -26,14 +25,13 @@ pub mod slicer;
 use self::hound::WavReader;
 use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
-use self::time_calc::{Samples, Beats, Ppqn};
+use self::time_calc::{Beats, Ppqn, Samples};
 use control::ControlMessage;
 use std::collections::HashMap;
 
 //use std::alloc::System;
 //#[global_allocator]
 //static GLOBAL: trallocator::Trallocator<System> = trallocator::Trallocator::new(System);
-
 
 /// pulse per quarter note
 pub const PPQN: Ppqn = 24;
@@ -123,14 +121,25 @@ impl SmartBuffer {
             }
         };
 
-        // samples preparation
-        // @TODO must check better the wave formats
-        // @TODO 24bit fails in silence
-        let mut samples: Vec<f32> = reader
-            .into_samples::<i16>()
-            .filter_map(Result::ok)
-            .map(i16::to_sample::<f32>)
-            .collect();
+        // get file spec
+        let spec = reader.spec();
+
+        // our samples interleaved
+        let mut samples: Vec<f32> = match spec.bits_per_sample {
+            24 | 32 => reader
+                .into_samples::<i32>()
+                .filter_map(Result::ok)
+                .map(i32::to_sample::<f32>)
+                .collect(),
+            16 => reader
+                .into_samples::<i16>()
+                .filter_map(Result::ok)
+                .map(i16::to_sample::<f32>)
+                .collect(),
+            _ => {
+                return Err("Wave bits_per_sample not supported")
+            }    
+        };
 
         // normalize samples
         // for consistency in volumes + better analysis

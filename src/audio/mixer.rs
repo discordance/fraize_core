@@ -10,7 +10,7 @@ use sample_gen::pvoc::PVOCGen;
 use sample_gen::repitch::RePitchGen;
 use sample_gen::slicer::SlicerGen;
 use sample_gen::{SampleGenerator, SmartBuffer};
-use sampling::SampleLib;
+use sample_lib::SampleLib;
 use control::ControlMessage;
 
 /// extending the Stereo Trait for additional mixing power
@@ -158,7 +158,7 @@ impl AudioMixer {
     /// init a new mixer, a lot of heavy lifting here
     pub fn new(conf: Config, command_rx: crossbeam_channel::Receiver<ControlMessage>) -> Self {
         // init the sample lib, crash of err
-        let sample_lib = ::sampling::init_lib(conf.clone())
+        let sample_lib = ::sample_lib::init_lib(conf.clone())
             .expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT in conf ?");
 
         // create tracks according to the config

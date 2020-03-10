@@ -11,7 +11,7 @@ mod control;
 mod midi;
 mod osc;
 mod sample_gen;
-mod sampling;
+mod sample_lib;
 
 ///
 ///     |~~~~~~~~~~~~|
