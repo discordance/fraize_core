@@ -1,14 +1,10 @@
-extern crate aubio;
-extern crate sample;
-extern crate time;
-extern crate time_calc;
+use aubio::pvoc::Pvoc;
+use sample::frame::Stereo;
+use sample::Frame;
+use time_calc::{Beats, Ticks};
+use crate::control::ControlMessage;
 
-use self::aubio::pvoc::Pvoc;
-use self::sample::frame::Stereo;
-use self::sample::Frame;
-use self::time_calc::{Beats, Ticks};
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
-use control::ControlMessage;
 
 ///
 const PI: f64 = std::f64::consts::PI;

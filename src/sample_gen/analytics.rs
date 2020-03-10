@@ -1,14 +1,11 @@
-extern crate aubio;
-extern crate num;
-extern crate sample;
-extern crate time_calc;
-
 use std::path::Path;
 
-use self::aubio::onset::Onset;
-use self::aubio::tempo::Tempo;
-use self::num::ToPrimitive;
-use self::time_calc::{Bpm, Samples};
+use aubio::onset::Onset;
+use aubio::tempo::Tempo;
+use num::ToPrimitive;
+use time_calc::{Samples, TimeSig};
+
+use regex::Regex;
 
 // consts
 const HOP_SIZE: usize = 512;
@@ -16,42 +13,63 @@ const WIND_SIZE: usize = 2048;
 const SR: usize = 44_100;
 
 // Parse the original tempo based on the beat value written in the filename
-fn parse_filepath_beats(path: &str) -> Result<usize, &str> {
+fn parse_filepath_beats(path: &str) -> Result<(usize, String), &str> {
     // compute path
     let path_obj = Path::new(path);
     let file_stem = match path_obj.file_stem() {
-        Some(fstem) => fstem,
+        Some(fstem) => match fstem.to_str() {
+            Some(s) => s,
+            None => return Err("NoFileName"),
+        },
         None => return Err("NoFileName"),
     };
-    let file_stem = match file_stem.to_str() {
-        Some(s) => s,
-        None => return Err("NoFileName"),
-    };
-    let split: Vec<&str> = file_stem.split("_").collect();
-    match split.last() {
-        Some(last) => {
-            match last.parse::<usize>() {
-                Ok(b) => return Ok(b),
-                Err(_err) => return Err("ParseIntError"),
-            };
-        }
-        None => return Err("NoBeatNum"),
+
+    // regex match beats or bpm
+    let re = Regex::new(r"([0-9]{2,3})(bpm|beats)").unwrap();
+
+    // match the file name
+    for cap in re.captures_iter(file_stem) {
+        let num = &cap[1];
+        let unit = &cap[2];
+
+        // parse the num part
+        match num.parse::<usize>() {
+            Ok(b) => {
+                return Ok((b, unit.to_owned()));
+            }
+            Err(_err) => return Err("ParseIntError"),
+        };
     }
+
+    return Err("NoBeatNum");
 }
 
 /// Get the original tempo based on the beat value written in the filename, or analized with Aubio if not present.
 /// Returns original tempo as computed from file name and the number of beats
-/// @TODO take care of the the aubio part
 pub fn read_original_tempo(path: &str, num_samples: usize) -> Option<(f64, usize)> {
     // compute number of beats
-    let num_beats = match parse_filepath_beats(path) {
+    let (num, unit) = match parse_filepath_beats(path) {
         Ok(n) => n,
         Err(err) => return None,
     };
-    let ms = Samples((num_samples as i64) / 2).to_ms(44_100.0);
 
-    let secs = ms.to_f64().unwrap() / 1000.0;
-    return Some((60.0 / (secs / num_beats as f64), num_beats));
+    match unit.as_str() {
+        // calculate bpm from num samples and num of beats
+        "beats" => {
+            let ms = Samples((num_samples as i64) / 2).to_ms(44_100.0);
+            let secs = ms.to_f64().unwrap() / 1000.0;
+            return Some((60.0 / (secs / num as f64), num));
+        }
+        //
+        "bpm" => {
+            let num_beats = Samples((num_samples as i64) / 2).beats(
+                num as f64,
+                44_100.0,
+            );
+            return Some((num as f64, num_beats as usize));
+        }
+        _ => return None,
+    }
 }
 
 /// Onset detector via Aubio.
@@ -122,7 +140,7 @@ pub fn detect_bpm(samples: &[f32]) -> f64 {
         .zip(samples.iter().step_by(2).skip(1))
         .map(|(l, r)| (l + r) / 2.0)
         .collect();
-        
+
     // let mono: Vec<f32> = samples.iter().step_by(2).map(|x| *x).collect();
     let mut chunk_iter = mono.chunks(HOP_SIZE / 4); // by chunk
     let mut tempo = Tempo::new(WIND_SIZE / 4, HOP_SIZE / 4, SR).expect("Tempo::new");

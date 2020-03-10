@@ -1,21 +1,14 @@
-extern crate midir;
-extern crate serde;
-extern crate time;
-extern crate time_calc;
-extern crate wmidi;
-extern crate crossbeam_channel;
-
 use serde::Deserialize;
 use std::thread;
 
-use self::crossbeam_channel::bounded;
-use self::midir::os::unix::VirtualInput;
-use self::midir::MidiInput;
-use self::time_calc::{Ppqn, Ticks};
-use self::wmidi::MidiMessage;
+use crossbeam_channel::bounded;
+use midir::os::unix::VirtualInput;
+use midir::MidiInput;
+use time_calc::{Ppqn, Ticks};
+use wmidi::MidiMessage;
 
-use config::Config;
-use control::{ControlMessage, PlaybackMessage, SyncMessage};
+use crate::config::Config;
+use crate::control::{ControlMessage, PlaybackMessage, SyncMessage};
 
 const PPQN: Ppqn = 24;
 
@@ -176,7 +169,7 @@ fn midi_cb(
                 MidiMessage::TimingClock => {
                     midi_time.tick(midi_tcode);
                     let message = SyncMessage::Tick(midi_tcode);
-                    cx_tx.try_send(::control::ControlMessage::Playback(PlaybackMessage {
+                    cx_tx.try_send(ControlMessage::Playback(PlaybackMessage {
                         sync: message,
                         time: midi_time.clone(),
                     })).unwrap();
@@ -185,7 +178,7 @@ fn midi_cb(
                 MidiMessage::Start => {
                     midi_time.restart();
                     let message = SyncMessage::Start();
-                    cx_tx.try_send(::control::ControlMessage::Playback(PlaybackMessage {
+                    cx_tx.try_send(ControlMessage::Playback(PlaybackMessage {
                         sync: message,
                         time: midi_time.clone(),
                     })).unwrap();
@@ -195,7 +188,7 @@ fn midi_cb(
                 MidiMessage::Stop => {
                     midi_time.restart();
                     let message = SyncMessage::Stop();
-                    cx_tx.try_send(::control::ControlMessage::Playback(PlaybackMessage {
+                    cx_tx.try_send(ControlMessage::Playback(PlaybackMessage {
                         sync: message,
                         time: midi_time.clone(),
                     })).unwrap();

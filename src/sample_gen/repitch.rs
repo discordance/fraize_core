@@ -5,8 +5,10 @@ use self::sample::frame::Stereo;
 use self::sample::{Frame, Sample};
 use self::time_calc::{Beats, Ticks};
 
+use crate::control::ControlMessage;
+
 use super::{SampleGen, SampleGenerator, SmartBuffer, PPQN};
-use control::ControlMessage;
+
 
 /// LinInterp is a struct that helps interpolation operations.
 struct LinInterp {

@@ -1,18 +1,13 @@
-extern crate crossbeam_channel;
-extern crate rosc;
-extern crate serde;
-extern crate serde_json;
-
-use self::crossbeam_channel::bounded;
-use self::rosc::encoder;
-use self::rosc::{OscMessage, OscPacket, OscType};
-use self::serde_json::to_string;
-use config::Config;
-use control::{ControlMessage, SlicerMessage};
+use crossbeam_channel::bounded;
+use rosc::encoder;
+use rosc::{OscMessage, OscPacket, OscType};
+use serde_json::to_string;
+use crate::config::Config;
+use crate::control::{ControlMessage, SlicerMessage};
 use std::net::{SocketAddr, SocketAddrV4, UdpSocket};
 use std::str::FromStr;
 use std::thread;
-use sample_gen::slicer::TransformType;
+use crate::sample_gen::slicer::TransformType;
 
 /// OSCRemoteControl keeps track of the remote controller app that control this smplr instance
 struct OSCRemoteControl {

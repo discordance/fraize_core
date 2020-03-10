@@ -1,8 +1,8 @@
-use sample_gen::SmartBuffer;
 use std::error::Error;
 use std::fs;
 
-use config::Config;
+use crate::config::Config;
+use crate::sample_gen::SmartBuffer;
 
 /// SampleLib Manage samples loading and analytics.
 /// Its like a In-Memory Sample Database

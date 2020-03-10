@@ -1,17 +1,14 @@
 //! Audio Mixer defines structs and traits useful for sampler routing.
 //! This is intended to be as modular as it can be.
-extern crate sample;
-extern crate crossbeam_channel;
+use sample::frame::{Frame, Stereo};
 
-use self::sample::frame::{Frame, Stereo};
-
-use config::{Config, TrackType};
-use sample_gen::pvoc::PVOCGen;
-use sample_gen::repitch::RePitchGen;
-use sample_gen::slicer::SlicerGen;
-use sample_gen::{SampleGenerator, SmartBuffer};
-use sample_lib::SampleLib;
-use control::ControlMessage;
+use crate::config::{Config, TrackType};
+use crate::control::{ControlMessage, Direction, DirectionalParam, SmoothParam, SyncMessage};
+use crate::sample_gen::pvoc::PVOCGen;
+use crate::sample_gen::repitch::RePitchGen;
+use crate::sample_gen::slicer::SlicerGen;
+use crate::sample_gen::{SampleGenerator, SmartBuffer};
+use crate::sample_lib::SampleLib;
 
 /// extending the Stereo Trait for additional mixing power
 pub trait StereoExt<F32> {
@@ -37,13 +34,13 @@ struct AudioTrack {
     /// A first audio round is necessary to get the size
     audio_buffer: Vec<Stereo<f32>>,
     /// Volume is the volume value of the track, pre effects, smoothed
-    volume: ::control::SmoothParam,
+    volume: SmoothParam,
     /// Pan is the panning value of the track, pre effects, smoothed
-    pan: ::control::SmoothParam,
+    pan: SmoothParam,
     /// Bank index (track-locked)
     bank: usize,
     /// Direction parameter for sample selection (Up/Down).
-    sample_select: ::control::DirectionalParam,
+    sample_select: DirectionalParam,
     /// Sample name to keep track for presets as the lib grows
     sample_name: String,
 }
@@ -57,9 +54,9 @@ impl AudioTrack {
             // we still dont know how much the buffer wants.
             // let's init at 512 and extend later.
             audio_buffer: Vec::with_capacity(512),
-            volume: ::control::SmoothParam::new(0.0, 1.0),
-            pan: ::control::SmoothParam::new(0.0, 0.0),
-            sample_select: ::control::DirectionalParam::new(0.0, 0.0),
+            volume: SmoothParam::new(0.0, 1.0),
+            pan: SmoothParam::new(0.0, 0.0),
+            sample_select: DirectionalParam::new(0.0, 0.0),
             bank,
             sample_name: String::from(""),
         }
@@ -158,7 +155,7 @@ impl AudioMixer {
     /// init a new mixer, a lot of heavy lifting here
     pub fn new(conf: Config, command_rx: crossbeam_channel::Receiver<ControlMessage>) -> Self {
         // init the sample lib, crash of err
-        let sample_lib = ::sample_lib::init_lib(conf.clone())
+        let sample_lib = crate::sample_lib::init_lib(conf.clone())
             .expect("Unable to load some samples, maybe an issue with the AUDIO_ROOT in conf ?");
 
         // create tracks according to the config
@@ -224,7 +221,7 @@ impl AudioMixer {
 
                 // pan stage
                 frame = frame.pan(track.pan.get_param(buff_size));
-   
+
                 // mix stage
                 acc[0] += frame[0] as f64;
                 acc[1] += frame[1] as f64;
@@ -246,7 +243,7 @@ impl AudioMixer {
                 // we have a message
                 Ok(command) => match command {
                     // Change tracked Sample inside the bank
-                    ::control::ControlMessage::TrackSampleSelect {
+                    ControlMessage::TrackSampleSelect {
                         tcode: _,
                         val,
                         track_num,
@@ -259,18 +256,18 @@ impl AudioMixer {
 
                             // match the resulting dir enum
                             match t.sample_select.get_param() {
-                                ::control::Direction::Up(_) => {
+                                Direction::Up(_) => {
                                     t.load_next_buffer(&self.sample_lib);
                                 }
-                                ::control::Direction::Down(_) => {
+                                Direction::Down(_) => {
                                     t.load_prev_buffer(&self.sample_lib);
                                 }
-                                ::control::Direction::Stable(_) => {}
+                                Direction::Stable(_) => {}
                             }
                         }
-                    },
+                    }
                     // Next Sample
-                    ::control::ControlMessage::TrackNextSample {
+                    ControlMessage::TrackNextSample {
                         tcode: _,
                         track_num,
                     } => {
@@ -280,9 +277,9 @@ impl AudioMixer {
                             // set the next sample
                             t.load_next_buffer(&self.sample_lib);
                         }
-                    },
+                    }
                     // Previous Sample
-                    ::control::ControlMessage::TrackPrevSample {
+                    ControlMessage::TrackPrevSample {
                         tcode: _,
                         track_num,
                     } => {
@@ -292,9 +289,9 @@ impl AudioMixer {
                             // set the prev sample
                             t.load_prev_buffer(&self.sample_lib);
                         }
-                    },
+                    }
                     // Volume
-                    ::control::ControlMessage::TrackVolume {
+                    ControlMessage::TrackVolume {
                         tcode: _,
                         val,
                         track_num,
@@ -307,7 +304,7 @@ impl AudioMixer {
                         }
                     }
                     // Pan
-                    ::control::ControlMessage::TrackPan {
+                    ControlMessage::TrackPan {
                         tcode: _,
                         val,
                         track_num,
@@ -320,7 +317,7 @@ impl AudioMixer {
                         }
                     }
                     // LoopDiv
-                    ::control::ControlMessage::TrackLoopDiv {
+                    ControlMessage::TrackLoopDiv {
                         tcode: _,
                         val,
                         track_num,
@@ -333,23 +330,23 @@ impl AudioMixer {
                         }
                     }
                     // Playback management
-                    ::control::ControlMessage::Playback(playback_message) => {
+                    ControlMessage::Playback(playback_message) => {
                         match playback_message.sync {
-                            ::control::SyncMessage::Start() => {
+                            SyncMessage::Start() => {
                                 // unmute all tracks
                                 for track in self.tracks.iter_mut() {
                                     track.play();
                                 }
                                 self.clock_ticks = 0;
                             }
-                            ::control::SyncMessage::Stop() => {
+                            SyncMessage::Stop() => {
                                 // mute all tracks
                                 for track in self.tracks.iter_mut() {
                                     track.stop();
                                 }
                                 self.clock_ticks = 0;
                             }
-                            ::control::SyncMessage::Tick(_tick) => {
+                            SyncMessage::Tick(_tick) => {
                                 // update tracks sync
                                 let global_tempo = playback_message.time.tempo;
                                 for track in self.tracks.iter_mut() {
@@ -361,7 +358,11 @@ impl AudioMixer {
                         }
                     }
                     // got a slicer message, we just find the right track and pass down to the generator implementation
-                    ControlMessage::Slicer { tcode: _, track_num, message: _ } => {
+                    ControlMessage::Slicer {
+                        tcode: _,
+                        track_num,
+                        message: _,
+                    } => {
                         // check if tracknum is around
                         let tr = self.tracks.get_mut(track_num);
                         if let Some(t) = tr {

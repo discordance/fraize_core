@@ -1,14 +1,16 @@
 extern crate serde;
 use serde::Deserialize;
 extern crate dirs;
-extern crate toml;
+// extern crate toml;
 
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 
-use self::toml::from_str;
+use toml::from_str;
 use std::io::Read;
+
+use crate::control::ControlMessage;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 /// Config struct
@@ -29,7 +31,7 @@ pub enum TrackType {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 /// MidiMap struct
 pub struct MidiMap {
-    pub cc: HashMap<String, HashMap<String, ::control::ControlMessage>>,
+    pub cc: HashMap<String, HashMap<String, ControlMessage>>,
 }
 
 /// Loads and parse the default config

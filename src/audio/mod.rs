@@ -1,18 +1,16 @@
 #![allow(dead_code)]
 extern crate cpal;
-extern crate sample;
-extern crate crossbeam_channel;
 
 mod filters;
 mod mixer;
 
 use self::cpal::{EventLoop, SampleFormat, StreamData, UnknownTypeOutputBuffer};
-use self::sample::frame::Stereo;
-use self::sample::ToFrameSliceMut;
-use control::ControlMessage;
+use sample::frame::Stereo;
+use sample::ToFrameSliceMut;
+use crate::control::ControlMessage;
 use std::thread;
 
-use config::Config;
+use crate::config::Config;
 
 /// Loudness, per block
 pub fn loudness(block_out: &[Stereo<f32>]) -> f32 {

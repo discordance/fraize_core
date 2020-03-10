@@ -2,6 +2,7 @@
 name = "smplr"
 version = "0.0.2"
 authors = ["Aymeric Nungee <nunja@free.fr>"]
+edition = "2018"
 
 [dependencies]
 rand = "0.3.14"
@@ -21,6 +22,7 @@ time = "*"
 rosc = "0.1.6"
 heapless = "0.5.3"
 easer = "0.2.1"
+regex = "1"
 
 
 [dependencies.cpal]

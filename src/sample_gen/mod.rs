@@ -10,10 +10,6 @@
 //! - RePitch uses a simple linear interpolation. Cubic and Quadratic don't worth the CPU cycles.
 //! - Sliced acts more like a beat slicer à la ReCycle.
 //! - PVoc uses TimeStretching from the Phase Vocoder implemented in Aubio.
-extern crate hound;
-extern crate sample;
-extern crate time_calc;
-//extern crate trallocator;
 
 // re-publish submodule repitch as a public module;
 pub mod analytics;
@@ -22,16 +18,13 @@ pub mod pvoc;
 pub mod repitch;
 pub mod slicer;
 
-use self::hound::WavReader;
-use self::sample::frame::Stereo;
-use self::sample::{Frame, Sample};
-use self::time_calc::{Beats, Ppqn, Samples};
-use control::ControlMessage;
+use hound::WavReader;
+use sample::frame::Stereo;
+use sample::{Frame, Sample};
+use time_calc::{Beats, Ppqn, Samples};
 use std::collections::HashMap;
 
-//use std::alloc::System;
-//#[global_allocator]
-//static GLOBAL: trallocator::Trallocator<System> = trallocator::Trallocator::new(System);
+use crate::control::ControlMessage;
 
 /// pulse per quarter note
 pub const PPQN: Ppqn = 24;
@@ -150,7 +143,6 @@ impl SmartBuffer {
         self.frames = frames.to_vec();
 
         // analyse
-        // println!("{}", path);
         self.analyse(&samples[..], path);
 
         Ok(true)
