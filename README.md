@@ -46,10 +46,10 @@ For this purpose, the **aubio** library is used extensively as a rust wrapper ar
 
 - **high level of abstraction**, embrace software complexity with elegance and modernity.
 - **memory safety**, never SEGFAULT, again.
-- **compiler**, rustc is a pair programmer.
 - **speed**, in **C** ballpark if you are careful, + auto-vectorization, SIMD ...
 - **fantastic tooling**, like compiling a CMake or a JUCE project is an old forgotten nightmare.
 - **bounded execution times**, NO nondeterministic garbage collected latency.
+- **compiler**, rustc is a real pair programmer.
 - **community**, just as brillant as helpful.
 
 But not everything is green in **Rustland**:
