@@ -17,7 +17,7 @@ The layout is quite simple:
 - Each **SampleGen** implements its own way to mangle samples for fun (x2 playback, beat repeats, freeze ...).
 - Each **Track** can have a chain of **FXs** on top ( *Filters* / *Delays* / *Reverbs* ...).
 - All this machinery is configurable with just a **TOML** file.
-- All **Tracks** can be synced to a *MIDI Clock*, *Internal Clock*, *Ableton Link*, *CV Clock* ...
+- All **Tracks** are synced to a *MIDI Clock*, *Internal Clock*, *Ableton Link* or even *CV Clock* ...
 
 ## How it works ?
 
