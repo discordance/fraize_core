@@ -1,4 +1,4 @@
-# 🍓Fraize 🍓
+# 🍓Fraize
 
 An opinionated multitrack **phrase/loop sampler**, written in **Rust**, with live performance in mind.
 
