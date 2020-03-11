@@ -21,9 +21,9 @@ The layout is quite simple:
 
 ## Features
 
-- [X] Onset detection / BPM analysis
+- [X] Onset / BPM analysis
 - [X] Slicer sample player
-- [X] Phase Vocoder Timestretching sample player (aubio)
+- [X] Phase Vocoder sample player (basic timestretch)
 - [X] RePitch sample player (linear interpolation)
 - [X] MIDI Controls (CC)
 - [X] MIDI Clock (Virtual Midi Device)
