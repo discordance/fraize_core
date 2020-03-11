@@ -25,7 +25,7 @@ The **GUI** is a separate project.
 
 The sampler will run on the network and can be controlled by the GUI via OSC API.
 
-## Features
+### Features
 
 - [X] Onset / BPM analysis
 - [X] Slicer sample player
