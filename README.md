@@ -19,6 +19,17 @@ The layout is quite simple:
 - All this machinery is configurable with just a **TOML** file.
 - All **Tracks** are synced to a *MIDI Clock*, *Internal Clock*, *Ableton Link* or even *CV Clock* ...
 
+## Features
+
+- [X] Onset detection / BPM analysis
+- [X] Slicer sample player
+- [X] Phase Vocoder Timestretching sample player (aubio)
+- [X] RePitch sample player (linear interpolation)
+- [X] MIDI Controls (CC)
+- [X] MIDI Clock (Virtual Midi Device)
+- [X] OSC API
+- [X] Debug GUI via imgui
+
 ## How it works ?
 
 ### GUI
