@@ -4,7 +4,7 @@ An opinionated multitrack **phrase/loop sampler**, written in **Rust**, with liv
 
 ## What ?!
 
-This is an experimental project aiming to create a (time-synced) multitrack loop player/mangler.
+This is an experimental project aiming to create a (time-synced) **multitrack loop player/mangler**.
 
 The basic idea is you can load folders of audio loop files and use it as a kind of Ableton Live for the poor peasant that can run on your Raspberry PI, Mac OSX, Linux + everything it can compile for.
 
