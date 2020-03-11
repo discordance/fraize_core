@@ -37,9 +37,8 @@ You can ease the work by setting directly the bpm in the file name, as in **amen
 
 For this purpose, the **aubio** library is used extensively as a rust wrapper around the **C** API.
 
-[Aubio](https://aubio.org/)
-
-[Aubio Rust bindings](https://github.com/discordance/aubio-rs)
+- [lib aubio](https://aubio.org/)
+- [aubio rust bindings](https://github.com/discordance/aubio-rs)
 
 ## But why Rust ?
 
