@@ -55,7 +55,7 @@ For this purpose, the **aubio** library is used extensively as a rust wrapper ar
 But not everything is green in **Rustland**:
 
 - **young**, libraries are mostly in infancy (unstable, sparse doc ...).
-- **audio**, very small audio community, no Rust version of Julian Storer yet.
+- **audio**, very small audio community, no Rust rewrite of Julian Storer yet.
 - **UI**, still very lacking on the GUI side (but lots of efforts).
 - **learning curve**, not so easy to grasp. It is a complex language and asks dedication.
 - **verbosity / ugliness**, this is very subjective :)
