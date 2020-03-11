@@ -14,7 +14,7 @@ The layout is quite simple:
 - Each **Track** have a dedicated and configurable Sampler Engine (**SampleGen**).
 - A **SampleGen**, or Sampler Engine, just means: **How to play this loop in sync with a clock**. 
     - think *Timestretch* / *Beat Slicer* / *Re-Pitch* ... or any other way to sync a bunch of samples with a tick.
-- Each **SampleGen** implements its own way to mangle samples for fun (x2 playback, beat repeats, freeze ...).
+- Each **SampleGen** implements its own way to mangle samples for fun (x2 playback, beat repeats, freeze, pitch shifts ...).
 - Each **Track** can have a chain of **FXs** on top ( *Filters* / *Delays* / *Reverbs* ...).
 - All this machinery is configurable with just a **TOML** file.
 - All **Tracks** are synced to a *MIDI Clock*, *Internal Clock*, *Ableton Link* or even *CV Clock* ...
