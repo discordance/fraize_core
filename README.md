@@ -12,7 +12,7 @@ The layout is quite simple:
 
 - **Tracks** are linked to folders containing samples (one Track / one Folder).
 - Each **Track** have a dedicated and configurable Sampler Engine (**SampleGen**).
-- A **SampleGen** is basically a way **to play a loop in sync with a clock with a method**. 
+- A **SampleGen** is basically a way **to play a loop in sync with a clock according to a method**. 
     - think *Timestretch* / *Beat Slicer* / *Re-Pitch* ... or any other way to sync a bunch of samples with a tick.
 - Each **SampleGen** implements its own way to mangle samples for fun (beat repeats, freeze, pitch shifts ...).
 - Each **Track** can have a chain of **FXs** on top ( *Filters* / *Delays* / *Reverbs* ...).
