@@ -19,6 +19,12 @@ The layout is quite simple:
 - All this machinery is configurable with just a **TOML** file.
 - All **Tracks** are synced to a *MIDI Clock*, *Internal Clock*, *Ableton Link* or even *CV Clock* ...
 
+### It runs headless
+
+The **GUI** is a separate project. 
+
+The sampler will run on the network and can be controlled by the GUI via OSC API.
+
 ## Features
 
 - [X] Onset / BPM analysis
