@@ -1,4 +1,4 @@
-use aubio::pvoc::Pvoc;
+use aubio_port_rs::pvoc::Pvoc;
 use sample::frame::Stereo;
 use sample::Frame;
 use time_calc::{Beats, Ticks};

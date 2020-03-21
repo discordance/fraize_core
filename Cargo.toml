@@ -28,11 +28,10 @@ regex = "1"
 [dependencies.cpal]
 # modified cpal
 git = "https://github.com/discordance/cpal.git"
-#path = "../cpal"
 
-[dependencies.aubio]
-# modified aubio wrapper
-git = "https://github.com/discordance/aubio-rs.git"
+[dependencies.aubio_port_rs]
+# pure rust aubio port
+git = "https://github.com/discordance/aubio_port_rust.git"
 
 [dev-dependencies]
 plotlib = "0.4.0"

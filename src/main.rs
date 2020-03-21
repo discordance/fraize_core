@@ -1,9 +1,5 @@
 #[macro_use]
 extern crate serde;
-extern crate aubio;
-extern crate hound;
-extern crate num;
-extern crate time_calc;
 
 mod audio;
 mod config;

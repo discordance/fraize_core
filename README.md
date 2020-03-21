@@ -21,9 +21,9 @@ The layout is quite simple:
 
 ## It runs headless
 
-The **GUI** is a separate project. 
+The **UI** is a separate project. 
 
-The sampler will run on the network and can be controlled by the GUI via OSC API.
+The sampler will run on the network and can be controlled by the UI via OSC API.
 
 ## Features
 

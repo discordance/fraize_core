@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use aubio::onset::Onset;
-use aubio::tempo::Tempo;
+use aubio_port_rs::onset::{OnsetMode, Onset};
+use aubio_port_rs::tempo::Tempo;
 use num::ToPrimitive;
 use time_calc::{Samples, TimeSig};
 
@@ -81,10 +81,12 @@ pub fn detect_onsets(samples: &[f32]) -> Vec<usize> {
         .zip(samples.iter().step_by(2).skip(1))
         .map(|(l, r)| (l + r) / 2.0)
         .collect();
+
+    // chunk iterator yields HOP_SIZE samples      
     let mut chunk_iter = mono.chunks(HOP_SIZE);
 
-    // onset
-    let mut onset = Onset::new(WIND_SIZE, HOP_SIZE, SR).expect("Onset::new");
+    // onset detector
+    let mut onset = Onset::new(OnsetMode::SpecFlux(),WIND_SIZE, HOP_SIZE, SR).expect("Onset::new");
 
     // params
     onset.set_threshold(0.3);
@@ -96,6 +98,7 @@ pub fn detect_onsets(samples: &[f32]) -> Vec<usize> {
 
     // zero by default
     positions.push(0);
+    
     // track
     let mut latest_detection = 0;
 
@@ -144,7 +147,6 @@ pub fn detect_bpm(samples: &[f32]) -> f64 {
     // let mono: Vec<f32> = samples.iter().step_by(2).map(|x| *x).collect();
     let mut chunk_iter = mono.chunks(HOP_SIZE / 4); // by chunk
     let mut tempo = Tempo::new(WIND_SIZE / 4, HOP_SIZE / 4, SR).expect("Tempo::new");
-    // let mut detected_tempo = 120.0;
 
     loop {
         let next = chunk_iter.next();
