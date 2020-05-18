@@ -450,7 +450,7 @@ impl SliceSeq {
     }
 
     /// Updates the current slice if have to
-    fn update_curr_slice(&mut self, gen_buffer: &SmartBuffer) {
+    fn update_curr_slice(&mut self, _gen_buffer: &SmartBuffer) {
         // nothing to worry about
         if self.local_buffer.is_none() {
             return;

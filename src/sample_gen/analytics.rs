@@ -3,7 +3,7 @@ use std::path::Path;
 use aubio_port_rs::onset::{OnsetMode, Onset};
 use aubio_port_rs::tempo::Tempo;
 use num::ToPrimitive;
-use time_calc::{Samples, TimeSig};
+use time_calc::{Samples};
 
 use regex::Regex;
 
@@ -50,7 +50,7 @@ pub fn read_original_tempo(path: &str, num_samples: usize) -> Option<(f64, usize
     // compute number of beats
     let (num, unit) = match parse_filepath_beats(path) {
         Ok(n) => n,
-        Err(err) => return None,
+        Err(_err) => return None,
     };
 
     match unit.as_str() {
