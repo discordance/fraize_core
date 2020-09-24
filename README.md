@@ -2,11 +2,11 @@
 
 An opinionated multitrack **phrase/loop sampler**, written in **Rust**, with live performance in mind.
 
-## What ?!
+## What
 
 This is an wip experimental project aiming to create a (time-synced) **multitrack loop player/mangler**.
 
-The basic idea is you can load folders of audio loop files and use it as a kind of Ableton Live for the poor that can run on your Raspberry PI, Mac OSX, Linux + everything it can compile for.
+The basic idea is you can load folders of audio loop files and use it as a kind of Live for the poor that can run on your Raspberry PI, Mac OSX, Linux + everything it can compile for.
 
 The layout is quite simple:
 
@@ -49,7 +49,7 @@ For this purpose, the **aubio** library is used in a rust wrapper around the **C
 - [lib aubio](https://aubio.org/)
 - [aubio rust bindings](https://github.com/discordance/aubio-rs)
 
-## But why Rust ?
+## why Rust ?
 
 **Rust** is a very promising language for **realtime audio** because it provides:
 
