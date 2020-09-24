@@ -1,3 +1,15 @@
+# specify the audio root with absolute path to look for samples
+# each folder (0, 1, 2) correspond a track
+audio_root = "your/samples_root"
+
+# TRACK CONFIG
+tracks = [
+  { PVOCGen = { bank = 0 } },
+  # more if you want
+#   { SlicerGen = { bank = 1 } },
+#   { RePitchGen = { bank = 2 } },
+]
+
 
 # MIDI MAP CC on CHANNEL 1
 [midi_map.cc.1]
@@ -15,5 +27,4 @@
 7 = { TrackVolume = { tcode = 0, val = 0.0, track_num = 1 } }
 # midi cc 10 on channel 2 is assigned to a TrackPan control, for track 1
 10 = { TrackPan = { tcode = 0, val = 0.5, track_num = 1 } }
-
 
