@@ -8,7 +8,7 @@ This is a wip experimental project aiming to create a (time-synced) **multitrack
 
 The basic idea is you can load folders of audio loop files and use it as a kind of Live for the poor that can run on your Raspberry PI, Mac OSX, Linux + everything it can compile for.
 
-The layout is quite simple:
+Layout, goals:
 
 - **Tracks** are linked to folders containing samples (one Track / one Folder).
 - Each **Track** have a dedicated and configurable Sampler Engine (**SampleGen**).
