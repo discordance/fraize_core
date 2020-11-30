@@ -4,7 +4,7 @@ An opinionated multitrack **phrase/loop sampler**, written in **Rust**, with liv
 
 ## What
 
-This is a wip experimental project aiming to create a (time-synced) **multitrack loop player/mangler**.
+This is a mostly failed experimental project aiming to create a (time-synced) **multitrack loop player/mangler**.
 
 The basic idea is you can load folders of audio loop files and use it as a kind of Live for the poor that can run on your Raspberry PI, Mac OSX, Linux + everything it can compile for.
 
@@ -21,9 +21,9 @@ Layout, goals:
 
 ## It runs headless
 
-**UI** will be a separate project. 
+**UI** should be a separate project. 
 
-The sampler will run on the network and can be controlled by the UI via OSC API.
+The sampler will run somewhere on the network and can be controlled by the UI via OSC API.
 
 ## Features
 
@@ -56,19 +56,10 @@ For this purpose, the **aubio** library is used in a rust wrapper around the **C
 - **high level of abstraction**, embrace software complexity with elegance and modernity.
 - **memory safety**,
 - **speed**, in **C** ballpark, + auto-vectorization, SIMD ...
-- **fantastic tooling**, not like CMake.
+- **fantastic tooling**, that you will absolutely love.
 - **bounded execution times**, no nondeterministic garbage collector latency.
 - **compiler**, rustc is a real pair programmer.
 - **community**, just as brillant as helpful.
-
-But not everything is easy yet in **Rustland**:
-
-- **young**, libraries are mostly in infancy (unstable, sparse doc ...).
-- **audio**, very small audio community, no Rust rewrite of Julian Storer yet.
-- **UI**, still very lacking on the GUI side (but of good efforts see [baseview](https://github.com/RustAudio/baseview).
-- **learning curve**, not so easy to grasp. It is a complex language and that needs dedication.
-- **verbosity / ugliness**, this is very subjective :)
-
 
 ## Roadmap
 
